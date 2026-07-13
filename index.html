@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ぴこっち - むかしなつかし育成ゲーム</title>
+  <meta name="description" content="昔なつかしの携帯育成ゲーム風PWA。ホーム画面に追加して遊んでね。">
+  <meta name="theme-color" content="#e56b8c">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ぴこっち">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body class="theme-retro">
+  <main id="shell">
+    <header id="shell-head">
+      <span id="title-logo">ぴこっち</span>
+      <span id="gen-label"></span>
+      <button id="btn-settings" class="head-btn" aria-label="せってい">⚙</button>
+    </header>
+
+    <section id="device">
+      <div class="icon-row" id="icon-row-top">
+        <button class="icon-btn" data-action="feed" aria-label="ごはん"><span>🍙</span><small>ごはん</small></button>
+        <button class="icon-btn" data-action="light" aria-label="でんき"><span>💡</span><small>でんき</small></button>
+        <button class="icon-btn" data-action="game" aria-label="あそぶ"><span>🎮</span><small>あそぶ</small></button>
+        <button class="icon-btn" data-action="medicine" aria-label="くすり"><span>💊</span><small>くすり</small></button>
+      </div>
+
+      <div id="screen-wrap">
+        <canvas id="screen" aria-label="ペットの画面"></canvas>
+        <div id="lcd-message" class="hidden"></div>
+        <div id="lights-overlay" class="hidden"></div>
+      </div>
+
+      <div class="icon-row" id="icon-row-bottom">
+        <button class="icon-btn" data-action="clean" aria-label="そうじ"><span>🧹</span><small>そうじ</small></button>
+        <button class="icon-btn" data-action="meter" aria-label="メーター"><span>📊</span><small>メーター</small></button>
+        <button class="icon-btn" data-action="discipline" aria-label="しつけ"><span>📣</span><small>しつけ</small></button>
+        <div class="icon-btn attention" id="attention-icon"><span>❗</span><small>よんでる</small></div>
+      </div>
+
+      <div id="abc-buttons">
+        <button id="btn-a" class="round-btn" aria-label="えらぶ">A</button>
+        <button id="btn-b" class="round-btn" aria-label="けってい">B</button>
+        <button id="btn-c" class="round-btn" aria-label="キャンセル">C</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- モーダル共通オーバーレイ -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-box">
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
