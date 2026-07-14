@@ -275,7 +275,17 @@ body {
   border: 2px solid color-mix(in srgb, var(--modal-fg) 35%, transparent);
 }
 
-.m-btn.big { font-size: 1.6rem; padding: 18px; flex: 1; }
+.m-btn.big { font-size: 1.6rem; padding: 18px; flex: 1; transition: opacity 0.15s, box-shadow 0.15s, transform 0.15s; }
+
+.m-btn.big.waiting { opacity: 0.45; }
+
+.m-btn.big.lit {
+  opacity: 1;
+  transform: scale(1.05);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent), 0 0 16px 4px var(--accent);
+}
+
+.bar.wide { width: 100%; margin: 4px 0 10px; }
 
 /* メーター画面 */
 .meter-row {

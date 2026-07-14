@@ -76,6 +76,7 @@ function closeModal() {
   $('#modal-overlay').classList.add('hidden');
   $('#modal-content').innerHTML = '';
   match = null;
+  stopGameTimers();
 }
 
 function modalOpen() {
@@ -138,54 +139,132 @@ function doLight() {
   afterAction();
 }
 
+let matchHistory = [];
+let gameRevealTimer = null;
+let gameWindowTimer = null;
+let gameAdvanceTimer = null;
+
+function stopGameTimers() {
+  clearTimeout(gameRevealTimer);
+  clearTimeout(gameWindowTimer);
+  clearTimeout(gameAdvanceTimer);
+  gameRevealTimer = gameWindowTimer = gameAdvanceTimer = null;
+}
+
 function doGame() {
   if (!canInteract()) return showMsg(feedBlockedMsg());
   match = MG.newMatch();
   matchHistory = [];
-  renderGameModal('どっちに いるかな?');
+  runRound();
 }
 
-function renderGameModal(status) {
-  const dots = Array.from({ length: MG.ROUNDS }, (_, i) => {
-    if (i >= match.round) return '・';
-    return i < match.round && matchHistory[i] ? '○' : '×';
-  }).join('');
+// 1ラウンド開始: 「よーい」→ ランダムな時間後に合図(reveal)→ 制限時間でタイムアウト
+function runRound() {
+  MG.startRound(match);
+  renderGameModal();
+  const delay = MG.REVEAL_DELAY_MIN + Math.random() * (MG.REVEAL_DELAY_MAX - MG.REVEAL_DELAY_MIN);
+  gameRevealTimer = setTimeout(() => {
+    MG.reveal(match);
+    renderGameModal();
+    gameWindowTimer = setTimeout(handleRoundTimeout, MG.windowMsForRound(match.round));
+  }, delay);
+}
+
+function handleGuess(choice) {
+  if (!match || match.finished || match.phase === 'result' || match.phase === 'idle') return;
+  const reason = match.phase === 'waiting' ? 'early' : (choice === match.target ? 'hit' : 'wrong');
+  stopGameTimers();
+  MG.resolveTap(match, choice);
+  matchHistory[match.round - 1] = match.lastResult;
+  finishRoundUI(reason);
+}
+
+function handleRoundTimeout() {
+  stopGameTimers();
+  if (!match || match.phase !== 'active') return;
+  MG.resolveTimeout(match);
+  matchHistory[match.round - 1] = match.lastResult;
+  finishRoundUI('timeout');
+}
+
+const ROUND_RESULT_TEXT = {
+  hit: 'せいかい! ○',
+  wrong: 'ちがう… ×',
+  early: 'はやすぎ! ×',
+  timeout: 'おそい… ×',
+};
+
+function finishRoundUI(reason) {
+  (match.lastResult ? snd.beepConfirm : snd.beepCancel)();
+  renderGameModal(ROUND_RESULT_TEXT[reason]);
+  if (match.finished) {
+    const won = match.won;
+    E.applyGameResult(state, won);
+    if (won) snd.jingleWin();
+    afterAction();
+    gameAdvanceTimer = setTimeout(() => renderGameResult(won), 900);
+  } else {
+    gameAdvanceTimer = setTimeout(runRound, 900);
+  }
+}
+
+// resultText を渡すとその文言を、渡さなければ match.phase から表示内容を組み立てる
+function renderGameModal(resultText) {
+  const dots = Array.from({ length: MG.ROUNDS }, (_, i) => (
+    i >= matchHistory.length ? '・' : (matchHistory[i] ? '○' : '×')
+  )).join('');
+
+  let status = resultText;
+  let leftExtra = '';
+  let rightExtra = '';
+  let barHtml = '';
+
+  if (!status) {
+    if (match.phase === 'waiting') {
+      status = match.round === 0 ? 'ひかったほうを すぐ おそう!' : 'よーい…';
+      leftExtra = rightExtra = ' waiting';
+    } else if (match.phase === 'active') {
+      status = match.target === 'left' ? '◀ ひだり!' : 'みぎ ▶!';
+      if (match.target === 'left') leftExtra = ' lit'; else rightExtra = ' lit';
+      barHtml = '<div class="bar wide" id="game-bar"><i id="game-bar-fill"></i></div>';
+    }
+  }
+
   const c = openModal(`
-    <h2>かくれんぼゲーム (${match.round}/${MG.ROUNDS})</h2>
+    <h2>みぎひだり はんしゃゲーム (${match.round}/${MG.ROUNDS})</h2>
     <div id="game-status">${status}</div>
-    <div id="game-rounds">${dots}</div>
+    ${barHtml}
     <div class="modal-buttons row">
-      <button class="m-btn big" data-guess="left">◀ ひだり</button>
-      <button class="m-btn big" data-guess="right">みぎ ▶</button>
+      <button class="m-btn big${leftExtra}" data-guess="left">◀ ひだり</button>
+      <button class="m-btn big${rightExtra}" data-guess="right">みぎ ▶</button>
     </div>
+    <div id="game-rounds">${dots}</div>
     <div class="modal-buttons">
       <button class="m-btn secondary" data-close>やめる</button>
     </div>`);
-  c.querySelectorAll('[data-guess]').forEach((b) => b.addEventListener('click', () => {
-    if (!match || match.finished) return;
-    MG.guess(match, b.dataset.guess);
-    matchHistory[match.round - 1] = match.lastCorrect;
-    snd.beep();
-    if (match.finished) {
-      const won = match.won;
-      E.applyGameResult(state, won);
-      if (won) snd.jingleWin(); else snd.beepCancel();
-      renderGameResult(won);
-      afterAction();
-    } else {
-      renderGameModal(match.lastCorrect ? 'あたり! ○' : 'はずれ… ×');
-    }
-  }));
+
+  c.querySelectorAll('[data-guess]').forEach((b) => b.addEventListener('click', () => handleGuess(b.dataset.guess)));
   c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
+
+  if (match.phase === 'active') startBarAnimation(MG.windowMsForRound(match.round));
 }
 
-let matchHistory = [];
+// タイミングバーを右から左へ制限時間ぶんかけて縮める
+function startBarAnimation(durationMs) {
+  const fill = document.getElementById('game-bar-fill');
+  if (!fill) return;
+  fill.style.transition = 'none';
+  fill.style.width = '100%';
+  void fill.offsetWidth; // 強制リフローしてから transition を効かせる
+  fill.style.transition = `width ${durationMs}ms linear`;
+  fill.style.width = '0%';
+}
 
 function renderGameResult(won) {
   const wins = match.wins;
   const c = openModal(`
     <h2>${won ? '🎉 かち!' : 'まけ…'}</h2>
-    <div id="game-status">${wins}かい あてた!<br>${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
+    <div id="game-status">${wins}かい せいかい した!<br>${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
     <div class="modal-buttons">
       <button class="m-btn" data-close>おわる</button>
     </div>`);
