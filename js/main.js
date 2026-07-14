@@ -17,6 +17,8 @@ let match = null;          // ミニゲームの進行状態
 let prevAttention = false;
 let deathShown = false;
 let msgTimer = null;
+let patting = false;       // キャラをなでた直後の演出中フラグ
+let pattingUntil = 0;
 
 const $ = (sel) => document.querySelector(sel);
 const iconButtons = () => [...document.querySelectorAll('.icon-btn[data-action]')];
@@ -422,7 +424,27 @@ function updateHUD() {
 
 function draw() {
   if (overlay && Date.now() > overlayUntil) overlay = null;
-  renderScene(ctx, state, { frame, theme: settings.theme, overlay });
+  if (patting && Date.now() > pattingUntil) patting = false;
+  renderScene(ctx, state, { frame, theme: settings.theme, overlay, patting });
+}
+
+function doPat() {
+  if (modalOpen()) return;
+  const r = E.patPet(state, Date.now());
+  if (r === 'unavailable') return;
+  if (r === 'asleep') {
+    showMsg('ぐっすり ねているよ');
+    return;
+  }
+  patting = true;
+  pattingUntil = Date.now() + 500;
+  snd.beep();
+  if (r === 'ok') {
+    showMsg('なでなで うれしい!');
+    saveGame(state);
+    updateHUD();
+  }
+  draw();
 }
 
 function gameTick() {
@@ -447,6 +469,8 @@ function bindInputs() {
   });
 
   $('#btn-settings').addEventListener('click', openSettings);
+
+  $('#screen').addEventListener('click', doPat);
 
   $('#btn-a').addEventListener('click', () => {
     if (modalOpen()) return;

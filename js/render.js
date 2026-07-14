@@ -40,7 +40,7 @@ export function setupCanvas(canvas) {
 }
 
 // メイン画面を1フレーム描画する
-// opts: { frame: 0|1, theme: 'retro'|'modern', overlay: null|'meal'|'snack', gameChoice: 'left'|'right'|null }
+// opts: { frame: 0|1, theme: 'retro'|'modern', overlay: null|'meal'|'snack', patting: boolean }
 export function renderScene(ctx, state, opts) {
   const { frame, theme } = opts;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -54,10 +54,15 @@ export function renderScene(ctx, state, opts) {
   const sprite = SPRITES[key] || SPRITES.egg;
   const rows = sprite.frames[frame % sprite.frames.length];
 
-  // キャラ本体(16x16 を 2倍 = 32x32、中央)
+  // キャラ本体(16x16 を 2倍 = 32x32、中央)。なでられた瞬間はぴょんと弾む
   const charX = 16;
-  const charY = 8;
+  const charY = opts.patting ? 6 : 8;
   drawSprite(ctx, rows, charX, charY, 2, theme, key);
+
+  if (opts.patting) {
+    drawSprite(ctx, SMALL.heart, 10, 4, 1, theme, 'heart');
+    drawSprite(ctx, SMALL.heart, 46, 8, 1, theme, 'heart');
+  }
 
   // 食事中はキャラの左に食べ物
   if (opts.overlay === 'meal' || opts.overlay === 'snack') {

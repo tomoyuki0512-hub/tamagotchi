@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   newGame, catchUp, feedMeal, feedSnack, cleanPoop, giveMedicine,
   toggleLight, disciplinePet, applyGameResult, needsAttention,
-  nextGeneration, TICK_MS, STAGE_BOUNDS, MAX_HEARTS,
+  nextGeneration, patPet, TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
 } from '../js/engine.js';
 
 // 現地時間の指定時刻でタイムスタンプを作る(睡眠判定が現地時間ベースのため)
@@ -223,4 +223,52 @@ test('次の世代は世代番号が増える', () => {
   const s2 = nextGeneration(s, at(10));
   assert.equal(s2.generation, 2);
   assert.equal(s2.stage, 'egg');
+});
+
+test('なでるとごきげんが上がる', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.happy = 1;
+  assert.equal(patPet(s, s.lastTick), 'ok');
+  assert.equal(s.happy, 2);
+});
+
+test('なでるのは3分に1回だけ効果がある(連打対策)', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.happy = 1;
+  const t = s.lastTick;
+  assert.equal(patPet(s, t), 'ok');
+  assert.equal(s.happy, 2);
+  assert.equal(patPet(s, t + 1000), 'cooldown');
+  assert.equal(s.happy, 2);
+  assert.equal(patPet(s, t + PAT_COOLDOWN_MS + 1), 'ok');
+  assert.equal(s.happy, 3);
+});
+
+test('ごきげんが満タンでもなでられる(上限で頭打ち)', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.happy = MAX_HEARTS;
+  assert.equal(patPet(s, s.lastTick), 'ok');
+  assert.equal(s.happy, MAX_HEARTS);
+});
+
+test('寝ている間になでてもごきげんは変わらない', () => {
+  const s = newGame(at(20, 30));
+  catchUp(s, at(20, 40));
+  assert.equal(s.asleep, true);
+  const h = s.happy;
+  assert.equal(patPet(s, s.lastTick), 'asleep');
+  assert.equal(s.happy, h);
+});
+
+test('たまごと死亡状態はなでても反応しない', () => {
+  const egg = newGame(at(9));
+  assert.equal(patPet(egg, egg.lastTick), 'unavailable');
+
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.dead = true;
+  assert.equal(patPet(s, s.lastTick), 'unavailable');
 });

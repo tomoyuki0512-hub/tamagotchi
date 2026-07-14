@@ -36,6 +36,7 @@ const MIN_WEIGHT = 5;
 
 export const MAX_HEARTS = 4;
 export const MAX_POOPS = 4;
+export const PAT_COOLDOWN_MS = 3 * 60 * 1000; // なでる効果は3分に1回まで
 
 // キャラクター定義(オリジナルキャラ)
 export const CHARACTERS = {
@@ -83,6 +84,7 @@ export function newGame(now, generation = 1) {
     callActive: false,
     callTicks: 0,
     lastCallHour: null,
+    lastPatAt: 0,
     events: [], // catchUp 中に起きた出来事(UI がダイジェスト表示後にクリア)
   };
 }
@@ -314,6 +316,16 @@ export function feedSnack(state) {
   if (!canAct(state)) return 'unavailable';
   state.happy = Math.min(MAX_HEARTS, state.happy + 1);
   state.weight += 2;
+  return 'ok';
+}
+
+// キャラをタップ(なでる)。連打対策で実際のごきげん上昇は PAT_COOLDOWN_MS に1回まで。
+export function patPet(state, now) {
+  if (state.dead || state.stage === 'egg') return 'unavailable';
+  if (state.asleep) return 'asleep';
+  if (now - (state.lastPatAt || 0) < PAT_COOLDOWN_MS) return 'cooldown';
+  state.lastPatAt = now;
+  state.happy = Math.min(MAX_HEARTS, state.happy + 1);
   return 'ok';
 }
 

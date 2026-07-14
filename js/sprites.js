@@ -365,6 +365,16 @@ export const SMALL = {
     '........',
     '........',
   ],
+  heart: [
+    '........',
+    '.##..##.',
+    '########',
+    '########',
+    '.######.',
+    '..####..',
+    '...##...',
+    '........',
+  ],
 };
 
 // モダンテーマ用パレット(primary = '#', secondary = 'o')
@@ -382,4 +392,5 @@ export const PALETTES = {
   skull: { primary: '#9aa5b1', secondary: '#3d4753' },
   meal: { primary: '#e0e6ec', secondary: '#f6f8fa' },
   snack: { primary: '#e8a1b8', secondary: '#d96a6a' },
+  heart: { primary: '#ff6b93', secondary: '#ff6b93' },
 };

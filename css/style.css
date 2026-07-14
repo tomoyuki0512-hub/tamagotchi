@@ -169,6 +169,7 @@ body {
   aspect-ratio: 4 / 3;
   image-rendering: pixelated;
   background: var(--lcd-bg);
+  cursor: pointer;
 }
 
 #lcd-message {
