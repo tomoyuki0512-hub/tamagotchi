@@ -40,12 +40,14 @@ export function setupCanvas(canvas) {
 }
 
 // メイン画面を1フレーム描画する
-// opts: { frame: 0|1, theme: 'retro'|'modern', overlay: null|'meal'|'snack', patting: boolean }
+// opts: { frame, theme, overlay: null|'meal'|'snack', patting: boolean, pattingHeart: boolean, bounce: number }
 export function renderScene(ctx, state, opts) {
   const { frame, theme } = opts;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
   if (state.dead) {
+    drawSprite(ctx, SMALL.grass, 4, 34, 1, theme, 'grass');
+    drawSprite(ctx, SMALL.grass, 52, 34, 1, theme, 'grass');
     drawSprite(ctx, SPRITES.tombstone.frames[0], 16, 8, 2, theme, 'tombstone');
     return;
   }
@@ -54,12 +56,12 @@ export function renderScene(ctx, state, opts) {
   const sprite = SPRITES[key] || SPRITES.egg;
   const rows = sprite.frames[frame % sprite.frames.length];
 
-  // キャラ本体(16x16 を 2倍 = 32x32、中央)。なでられた瞬間はぴょんと弾む
+  // キャラ本体(16x16 を 2倍 = 32x32、中央)。常に小さくバウンドし、なでられた瞬間はぴょんと弾む
   const charX = 16;
-  const charY = opts.patting ? 6 : 8;
+  const charY = 8 - (opts.patting ? 2 : 0) - (opts.bounce || 0);
   drawSprite(ctx, rows, charX, charY, 2, theme, key);
 
-  if (opts.patting) {
+  if (opts.pattingHeart) {
     drawSprite(ctx, SMALL.heart, 10, 4, 1, theme, 'heart');
     drawSprite(ctx, SMALL.heart, 46, 8, 1, theme, 'heart');
   }

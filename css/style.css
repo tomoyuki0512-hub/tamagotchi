@@ -136,7 +136,8 @@ body {
 .icon-btn span { font-size: 1.45rem; filter: var(--icon-filter); }
 .icon-btn small { font-size: 0.62rem; font-weight: bold; }
 
-.icon-btn:active { background: var(--icon-active); }
+.icon-btn { transition: transform 0.1s; }
+.icon-btn:active { background: var(--icon-active); transform: scale(0.92); }
 
 .icon-btn.selected {
   outline: 3px solid var(--accent);
@@ -170,6 +171,21 @@ body {
   image-rendering: pixelated;
   background: var(--lcd-bg);
   cursor: pointer;
+}
+
+/* レトロテーマだけ、うっすら走査線を重ねて液晶っぽさを出す */
+body.theme-retro #screen-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.08) 0px,
+    rgba(0, 0, 0, 0.08) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
 }
 
 #lcd-message {
@@ -241,6 +257,20 @@ body {
   overflow-y: auto;
   padding: 20px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+#modal-box.pop { animation: modalPop 0.18s ease; }
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.section-label {
+  font-weight: bold;
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: 16px 0 2px;
 }
 
 #modal-content h2 {

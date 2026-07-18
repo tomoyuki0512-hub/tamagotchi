@@ -45,3 +45,32 @@ export function saveSettings(settings) {
     console.warn('設定の保存に失敗しました', e);
   }
 }
+
+// 生涯記録(世代リセットをまたいで残る、そだてなおしても消えない)
+const RECORDS_KEY = 'picotchi-records-v1';
+
+const DEFAULT_RECORDS = {
+  generations: 0,
+  totalPats: 0,
+  gamesPlayed: 0,
+  gamesWon: 0,
+  longestLifeDays: 0,
+  bestAvgReactionMs: null,
+};
+
+export function loadRecords() {
+  try {
+    const raw = localStorage.getItem(RECORDS_KEY);
+    return raw ? { ...DEFAULT_RECORDS, ...JSON.parse(raw) } : { ...DEFAULT_RECORDS };
+  } catch {
+    return { ...DEFAULT_RECORDS };
+  }
+}
+
+export function saveRecords(records) {
+  try {
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.warn('きろくの保存に失敗しました', e);
+  }
+}

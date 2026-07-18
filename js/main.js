@@ -2,12 +2,13 @@
 
 import * as E from './engine.js';
 import { setupCanvas, renderScene } from './render.js';
-import { saveGame, loadGame, clearGame, loadSettings, saveSettings } from './storage.js';
+import { saveGame, loadGame, clearGame, loadSettings, saveSettings, loadRecords, saveRecords } from './storage.js';
 import * as snd from './sound.js';
 import * as MG from './minigame.js';
 
 let state;
 let settings;
+let records;
 let ctx;
 let frame = 0;
 let overlay = null;        // 'meal' | 'snack' | null(食事アニメ)
@@ -17,8 +18,9 @@ let match = null;          // ミニゲームの進行状態
 let prevAttention = false;
 let deathShown = false;
 let msgTimer = null;
-let patting = false;       // キャラをなでた直後の演出中フラグ
+let patting = false;       // キャラをなでた直後のバウンド演出フラグ
 let pattingUntil = 0;
+let pattingHeart = false;  // ハート演出(実際にごきげんが上がった時だけ)
 
 const $ = (sel) => document.querySelector(sel);
 const iconButtons = () => [...document.querySelectorAll('.icon-btn[data-action]')];
@@ -67,8 +69,16 @@ function showMsg(text, ms = 1800) {
 // ---- モーダル ----
 
 function openModal(html) {
+  const wasHidden = $('#modal-overlay').classList.contains('hidden');
   $('#modal-content').innerHTML = html;
   $('#modal-overlay').classList.remove('hidden');
+  if (wasHidden) {
+    // 新規に開いた時だけポップイン演出(ミニゲームのラウンド毎の再描画では発火させない)
+    const box = $('#modal-box');
+    box.classList.remove('pop');
+    void box.offsetWidth;
+    box.classList.add('pop');
+  }
   return $('#modal-content');
 }
 
@@ -140,6 +150,8 @@ function doLight() {
 }
 
 let matchHistory = [];
+let matchReactionTimes = []; // ヒット時の反応時間(ms)。ヒット以外は null
+let revealAt = 0;            // 合図(reveal)が出た時刻
 let gameRevealTimer = null;
 let gameWindowTimer = null;
 let gameAdvanceTimer = null;
@@ -155,6 +167,7 @@ function doGame() {
   if (!canInteract()) return showMsg(feedBlockedMsg());
   match = MG.newMatch();
   matchHistory = [];
+  matchReactionTimes = [];
   runRound();
 }
 
@@ -165,6 +178,7 @@ function runRound() {
   const delay = MG.REVEAL_DELAY_MIN + Math.random() * (MG.REVEAL_DELAY_MAX - MG.REVEAL_DELAY_MIN);
   gameRevealTimer = setTimeout(() => {
     MG.reveal(match);
+    revealAt = Date.now();
     renderGameModal();
     gameWindowTimer = setTimeout(handleRoundTimeout, MG.windowMsForRound(match.round));
   }, delay);
@@ -173,10 +187,12 @@ function runRound() {
 function handleGuess(choice) {
   if (!match || match.finished || match.phase === 'result' || match.phase === 'idle') return;
   const reason = match.phase === 'waiting' ? 'early' : (choice === match.target ? 'hit' : 'wrong');
+  const reactionMs = reason === 'hit' ? Date.now() - revealAt : null;
   stopGameTimers();
   MG.resolveTap(match, choice);
   matchHistory[match.round - 1] = match.lastResult;
-  finishRoundUI(reason);
+  matchReactionTimes[match.round - 1] = reactionMs;
+  finishRoundUI(reason, reactionMs);
 }
 
 function handleRoundTimeout() {
@@ -184,19 +200,20 @@ function handleRoundTimeout() {
   if (!match || match.phase !== 'active') return;
   MG.resolveTimeout(match);
   matchHistory[match.round - 1] = match.lastResult;
-  finishRoundUI('timeout');
+  matchReactionTimes[match.round - 1] = null;
+  finishRoundUI('timeout', null);
 }
 
 const ROUND_RESULT_TEXT = {
-  hit: 'せいかい! ○',
   wrong: 'ちがう… ×',
   early: 'はやすぎ! ×',
   timeout: 'おそい… ×',
 };
 
-function finishRoundUI(reason) {
+function finishRoundUI(reason, reactionMs) {
   (match.lastResult ? snd.beepConfirm : snd.beepCancel)();
-  renderGameModal(ROUND_RESULT_TEXT[reason]);
+  const text = reason === 'hit' ? `せいかい! ○ (${reactionMs}ms)` : ROUND_RESULT_TEXT[reason];
+  renderGameModal(text);
   if (match.finished) {
     const won = match.won;
     E.applyGameResult(state, won);
@@ -262,9 +279,25 @@ function startBarAnimation(durationMs) {
 
 function renderGameResult(won) {
   const wins = match.wins;
+  const hitTimes = matchReactionTimes.filter((t) => t != null);
+  const avg = hitTimes.length ? Math.round(hitTimes.reduce((a, b) => a + b, 0) / hitTimes.length) : null;
+  const rank = avg == null ? null : avg < 350 ? 'S' : avg < 500 ? 'A' : avg < 650 ? 'B' : 'C';
+
+  records.gamesPlayed++;
+  if (won) records.gamesWon++;
+  let bestUpdated = false;
+  if (won && avg != null && (records.bestAvgReactionMs == null || avg < records.bestAvgReactionMs)) {
+    records.bestAvgReactionMs = avg;
+    bestUpdated = true;
+  }
+  saveRecords(records);
+
+  const avgLine = avg != null ? `へいきん はんのう: ${avg}ms (${rank}ランク)<br>` : '';
+  const bestLine = bestUpdated ? '🏆 じこベスト こうしん!<br>' : '';
+
   const c = openModal(`
     <h2>${won ? '🎉 かち!' : 'まけ…'}</h2>
-    <div id="game-status">${wins}かい せいかい した!<br>${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
+    <div id="game-status">${wins}かい せいかい した!<br>${avgLine}${bestLine}${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
     <div class="modal-buttons">
       <button class="m-btn" data-close>おわる</button>
     </div>`);
@@ -303,6 +336,8 @@ function doMeter() {
   openModal(`
     <h2>${charName()} のようす</h2>
     <div class="meter-row"><span>なまえ</span><b>${charName()}</b></div>
+    <div class="meter-row"><span>たいちょう</span><b>${state.sick ? 'びょうき 🤒' : 'げんき'}</b></div>
+    <div class="meter-row"><span>ようす</span><b>${state.asleep ? 'ねている 💤' : 'おきてる'}</b></div>
     <div class="meter-row"><span>おなか</span><span class="hearts">${hearts(state.hunger)}</span></div>
     <div class="meter-row"><span>ごきげん</span><span class="hearts">${hearts(state.happy)}</span></div>
     <div class="meter-row"><span>しつけ</span><span class="bar"><i style="width:${state.discipline}%"></i></span></div>
@@ -363,6 +398,12 @@ function openSettings() {
         <button data-sound="off" class="${settings.sound ? '' : 'on'}">OFF</button>
       </span>
     </div>
+    <div class="section-label">きろく</div>
+    <div class="meter-row"><span>そだてた せだい</span><b>${records.generations}</b></div>
+    <div class="meter-row"><span>なでた かいすう</span><b>${records.totalPats}</b></div>
+    <div class="meter-row"><span>ゲームの せいせき</span><b>${records.gamesWon} / ${records.gamesPlayed} かち</b></div>
+    <div class="meter-row"><span>さいちょう じゅみょう</span><b>${records.longestLifeDays} にち</b></div>
+    <div class="meter-row"><span>はんしゃベスト</span><b>${records.bestAvgReactionMs != null ? records.bestAvgReactionMs + 'ms' : 'まだ なし'}</b></div>
     <div class="modal-buttons">
       <button class="m-btn secondary" data-reset>さいしょから そだてなおす</button>
       <button class="m-btn" data-close>とじる</button>
@@ -412,6 +453,9 @@ function openSettings() {
 function showDeathModal() {
   deathShown = true;
   const days = E.ageDays(state, state.lastTick);
+  records.generations++;
+  records.longestLifeDays = Math.max(records.longestLifeDays, days);
+  saveRecords(records);
   const c = openModal(`
     <h2>${charName()} は ほしに かえった…</h2>
     <p style="text-align:center; line-height:1.8">
@@ -503,8 +547,10 @@ function updateHUD() {
 
 function draw() {
   if (overlay && Date.now() > overlayUntil) overlay = null;
-  if (patting && Date.now() > pattingUntil) patting = false;
-  renderScene(ctx, state, { frame, theme: settings.theme, overlay, patting });
+  if (patting && Date.now() > pattingUntil) patting = pattingHeart = false;
+  // ごく小さなアイドルバウンス(フレーム切替と同期させ、ピクセルがにじまないよう整数値のみ使う)
+  const bounce = !state.asleep && !state.dead && frame === 1 ? 1 : 0;
+  renderScene(ctx, state, { frame, theme: settings.theme, overlay, patting, pattingHeart, bounce });
 }
 
 function doPat() {
@@ -516,10 +562,13 @@ function doPat() {
     return;
   }
   patting = true;
+  pattingHeart = r === 'ok';
   pattingUntil = Date.now() + 500;
   snd.beep();
   if (r === 'ok') {
     showMsg('なでなで うれしい!');
+    records.totalPats++;
+    saveRecords(records);
     saveGame(state);
     updateHUD();
   }
@@ -583,6 +632,7 @@ function highlightSelection() {
 
 function init() {
   settings = loadSettings();
+  records = loadRecords();
   applyTheme();
   snd.setSoundEnabled(settings.sound);
 

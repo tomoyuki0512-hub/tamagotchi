@@ -375,6 +375,16 @@ export const SMALL = {
     '...##...',
     '........',
   ],
+  grass: [
+    '........',
+    '........',
+    '........',
+    '........',
+    '.#...#..',
+    '.#..##..',
+    '##.###.#',
+    '########',
+  ],
 };
 
 // モダンテーマ用パレット(primary = '#', secondary = 'o')
@@ -393,4 +403,5 @@ export const PALETTES = {
   meal: { primary: '#e0e6ec', secondary: '#f6f8fa' },
   snack: { primary: '#e8a1b8', secondary: '#d96a6a' },
   heart: { primary: '#ff6b93', secondary: '#ff6b93' },
+  grass: { primary: '#6ea363', secondary: '#6ea363' },
 };
