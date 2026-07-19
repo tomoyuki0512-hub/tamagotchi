@@ -74,3 +74,24 @@ export function saveRecords(records) {
     console.warn('きろくの保存に失敗しました', e);
   }
 }
+
+// あそび時間セッション(5分あそんだら10分休憩)。アプリを閉じても続くよう永続化する
+const PLAY_SESSION_KEY = 'picotchi-playsession-v1';
+const DEFAULT_PLAY_SESSION = { playStartAt: null, breakUntil: null };
+
+export function loadPlaySession() {
+  try {
+    const raw = localStorage.getItem(PLAY_SESSION_KEY);
+    return raw ? { ...DEFAULT_PLAY_SESSION, ...JSON.parse(raw) } : { ...DEFAULT_PLAY_SESSION };
+  } catch {
+    return { ...DEFAULT_PLAY_SESSION };
+  }
+}
+
+export function savePlaySession(session) {
+  try {
+    localStorage.setItem(PLAY_SESSION_KEY, JSON.stringify(session));
+  } catch (e) {
+    console.warn('あそび時間の保存に失敗しました', e);
+  }
+}

@@ -9,6 +9,7 @@
 - アプリを閉じている間も時間が進む(開くと「留守中ダイジェスト」を表示)
 - きせかえ: **レトロ液晶** ⇔ **モダンかわいい** の2テーマ
 - 通信不要・完全オフライン動作(セーブはブラウザ内 localStorage)
+- 5分あそんだら10分間の休憩タイム(アプリを閉じても継続、遊びすぎ防止)
 
 ## 遊べるようにする手順(初回だけ)
 
@@ -52,15 +53,16 @@ js/engine.js          ゲームロジック(DOM非依存の純粋ロジック)
 js/main.js            画面制御・入力・ゲームループ
 js/render.js          Canvas ドット絵描画
 js/sprites.js         キャラのドット絵データとパレット
-js/storage.js         セーブ(localStorage)
+js/storage.js         セーブ・きろく・休憩セッション(localStorage)
 js/sound.js           ピコピコ音(WebAudio)
-js/minigame.js        左右当てゲーム
+js/minigame.js        みぎひだり はんしゃゲーム
+js/breaktimer.js      5分あそんだら10分休憩、のロジック
 sw.js                 Service Worker(オフラインキャッシュ)
 manifest.webmanifest  PWA マニフェスト
-test/engine.test.js   ロジックのユニットテスト
+test/                 ロジックのユニットテスト(engine/minigame/breaktimer)
 ```
 
-- テスト: `node --test test/engine.test.js`
+- テスト: `node --test test/engine.test.js test/minigame.test.js test/breaktimer.test.js`
 - ローカル起動: `python3 -m http.server 8000` → `http://localhost:8000`
 - **リリース時の注意**: ファイルを変更したら `sw.js` の `CACHE_VERSION` を上げると、
   インストール済み端末のキャッシュが確実に更新されます

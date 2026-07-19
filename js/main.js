@@ -2,13 +2,15 @@
 
 import * as E from './engine.js';
 import { setupCanvas, renderScene } from './render.js';
-import { saveGame, loadGame, clearGame, loadSettings, saveSettings, loadRecords, saveRecords } from './storage.js';
+import { saveGame, loadGame, clearGame, loadSettings, saveSettings, loadRecords, saveRecords, loadPlaySession, savePlaySession } from './storage.js';
 import * as snd from './sound.js';
 import * as MG from './minigame.js';
+import * as BT from './breaktimer.js';
 
 let state;
 let settings;
 let records;
+let playSession;
 let ctx;
 let frame = 0;
 let overlay = null;        // 'meal' | 'snack' | null(食事アニメ)
@@ -585,30 +587,73 @@ function gameTick() {
   }
 }
 
+// ---- 休憩タイマー(5分あそんだら10分操作不能に)----
+
+function blockedByBreak() {
+  return BT.isOnBreak(playSession, Date.now());
+}
+
+function showBreakOverlay(remainMs) {
+  $('#break-overlay').classList.remove('hidden');
+  const mm = Math.floor(remainMs / 60000);
+  const ss = Math.floor((remainMs % 60000) / 1000);
+  $('#break-countdown').textContent = `のこり ${mm}:${String(ss).padStart(2, '0')}`;
+}
+
+function hideBreakOverlay() {
+  $('#break-overlay').classList.add('hidden');
+}
+
+function updatePlayTimer() {
+  const now = Date.now();
+  const next = BT.tick(playSession, now);
+  if (next !== playSession) {
+    const enteringBreak = next.breakUntil != null;
+    playSession = next;
+    savePlaySession(playSession);
+    if (enteringBreak) {
+      closeModal();
+      snd.beepAttention();
+    }
+  }
+  if (BT.isOnBreak(playSession, now)) {
+    showBreakOverlay(BT.remainingBreakMs(playSession, now));
+  } else {
+    hideBreakOverlay();
+  }
+}
+
 // ---- 入力(アイコン・A/B/C)----
 
 function bindInputs() {
   iconButtons().forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (blockedByBreak()) return;
       selectedIcon = -1;
       highlightSelection();
       ACTIONS[btn.dataset.action]();
     });
   });
 
-  $('#btn-settings').addEventListener('click', openSettings);
+  $('#btn-settings').addEventListener('click', () => {
+    if (blockedByBreak()) return;
+    openSettings();
+  });
 
-  $('#screen').addEventListener('click', doPat);
+  $('#screen').addEventListener('click', () => {
+    if (blockedByBreak()) return;
+    doPat();
+  });
 
   $('#btn-a').addEventListener('click', () => {
-    if (modalOpen()) return;
+    if (blockedByBreak() || modalOpen()) return;
     snd.beep();
     selectedIcon = (selectedIcon + 1) % iconButtons().length;
     highlightSelection();
   });
 
   $('#btn-b').addEventListener('click', () => {
-    if (modalOpen()) return;
+    if (blockedByBreak() || modalOpen()) return;
     if (selectedIcon < 0) return;
     const btn = iconButtons()[selectedIcon];
     selectedIcon = -1;
@@ -617,6 +662,7 @@ function bindInputs() {
   });
 
   $('#btn-c').addEventListener('click', () => {
+    if (blockedByBreak()) return;
     snd.beepCancel();
     if (modalOpen()) { closeModal(); return; }
     selectedIcon = -1;
@@ -633,6 +679,7 @@ function highlightSelection() {
 function init() {
   settings = loadSettings();
   records = loadRecords();
+  playSession = loadPlaySession();
   applyTheme();
   snd.setSoundEnabled(settings.sound);
 
@@ -659,9 +706,11 @@ function init() {
 
   bindInputs();
   updateHUD();
+  updatePlayTimer();
   draw();
 
   setInterval(gameTick, 1000);           // 1秒ごとに実時間と同期
+  setInterval(updatePlayTimer, 1000);    // 5分あそんだら10分休憩
   setInterval(() => { frame ^= 1; draw(); }, 500); // アニメーション
 
   document.addEventListener('visibilitychange', () => {
@@ -676,6 +725,7 @@ function init() {
       handleLiveEvents(events);
     }
     updateHUD();
+    updatePlayTimer();
     draw();
   });
 

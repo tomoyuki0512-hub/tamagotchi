@@ -248,6 +248,24 @@ body.theme-retro #screen-wrap::after {
   padding: 20px;
 }
 
+/* ===== 休憩タイマー ===== */
+#break-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 20, 0.94);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+}
+
+#break-box h2 { font-size: 1.4rem; margin-bottom: 10px; }
+#break-box p { opacity: 0.85; margin-bottom: 18px; font-size: 0.95rem; }
+#break-countdown { font-size: 2.4rem; font-weight: bold; letter-spacing: 0.05em; font-variant-numeric: tabular-nums; }
+
 #modal-box {
   background: var(--modal-bg);
   color: var(--modal-fg);
