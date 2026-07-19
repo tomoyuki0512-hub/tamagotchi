@@ -15,9 +15,8 @@ function advance(state, ticks) {
   catchUp(state, state.lastTick + ticks * TICK_MS);
 }
 
-test('たまごは5分でふ化してベビーになる', () => {
+test('たまごは1分でふ化してベビーになる', () => {
   const s = newGame(at(10));
-  advance(s, 4);
   assert.equal(s.stage, 'egg');
   advance(s, 1);
   assert.equal(s.stage, 'baby');
@@ -27,7 +26,7 @@ test('たまごは5分でふ化してベビーになる', () => {
 
 test('たまごの間はパラメータが減らない', () => {
   const s = newGame(at(10));
-  advance(s, 4);
+  assert.equal(s.stage, 'egg');
   assert.equal(s.hunger, MAX_HEARTS);
   assert.equal(s.poops, 0);
 });

@@ -479,7 +479,7 @@ function showDeathModal() {
 }
 
 function showWelcome() {
-  showMsg('たまごが とどいた! 5ふんで うまれるよ', 4000);
+  showMsg('たまごが とどいた! 1ぷんで うまれるよ', 4000);
 }
 
 // ---- 留守中ダイジェスト ----
