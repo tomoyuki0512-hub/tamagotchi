@@ -77,13 +77,38 @@ test('空腹を90分放置すると病気になり、くすりで治る', () => 
   assert.equal(s.sick, false);
 });
 
-test('病気を6時間放置すると死ぬ', () => {
+test('病気を6時間放置しても死なず「よわっている」状態になる', () => {
   const s = newGame(at(6));
   advance(s, 10);
   s.hunger = 0;
   advance(s, 90 + 360);
-  assert.equal(s.dead, true);
-  assert.equal(s.deathCause, 'sickness');
+  assert.equal(s.dead, false, '放置では死なない');
+  assert.equal(s.weak, true);
+  assert.ok(s.events.some(e => e.type === 'gotWeak'));
+});
+
+test('よわっていても看病すれば元気に戻る', () => {
+  const s = newGame(at(6));
+  advance(s, 10);
+  s.hunger = 0;
+  advance(s, 90 + 360);
+  assert.equal(s.weak, true);
+
+  giveMedicine(s);
+  cleanPoop(s);
+  while (feedMeal(s) === 'ok');
+  advance(s, 1);
+  assert.equal(s.weak, false);
+  assert.ok(s.events.some(e => e.type === 'recovered'));
+});
+
+test('空腹を12時間放置しても死なずによわるだけ', () => {
+  const s = newGame(at(6));
+  advance(s, 10);
+  s.hunger = 0;
+  advance(s, 720 + 5);
+  assert.equal(s.dead, false);
+  assert.equal(s.weak, true);
 });
 
 test('太りすぎると病気になる', () => {
@@ -138,6 +163,13 @@ test('成長: ベビー→こども→ティーン→アダルト', () => {
   step(STAGE_BOUNDS.teen - STAGE_BOUNDS.child);
   assert.equal(s.stage, 'adult');
   assert.equal(s.dead, false);
+});
+
+test('進化は1日1回のペース(1日目こども・2日目ティーン・3日目アダルト)', () => {
+  const DAY = 1440;
+  assert.equal(STAGE_BOUNDS.baby, DAY, '1日ちょうどでこども');
+  assert.equal(STAGE_BOUNDS.child, 2 * DAY, '2日ちょうどでティーン');
+  assert.equal(STAGE_BOUNDS.teen, 3 * DAY, '3日ちょうどでアダルト');
 });
 
 test('良いお世話ならきらりんに進化', () => {
@@ -208,12 +240,19 @@ test('アテンション: 空腹・うんち・病気・呼び出しで点灯', 
   assert.equal(needsAttention(s), true);
 });
 
-test('長期放置(オフライン復帰)でも破綻せず死亡まで進む', () => {
+test('数日放置して復帰しても生きている(よわっているだけ)', () => {
+  const s = newGame(at(9));
+  catchUp(s, at(9) + 3 * 24 * 60 * TICK_MS); // 3日後に復帰
+  assert.equal(s.dead, false, '3日放置でも死なない');
+  assert.equal(s.weak, true);
+});
+
+test('とても長く放置すると天寿をまっとうする', () => {
   const s = newGame(at(9));
   const processed = catchUp(s, at(9) + 60 * 24 * 60 * TICK_MS); // 60日後に復帰
   assert.equal(s.dead, true);
+  assert.equal(s.deathCause, 'oldAge', '死因は寿命のみ');
   assert.ok(processed < 40 * 24 * 60, '死亡後はシミュレートを打ち切る');
-  assert.ok(s.events.some(e => e.type.startsWith('died:')));
 });
 
 test('次の世代は世代番号が増える', () => {

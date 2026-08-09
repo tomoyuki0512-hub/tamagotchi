@@ -37,6 +37,8 @@ const EVENT_TEXT = {
   'evolved:adult_normal': 'もちすけに しんかした!',
   'evolved:adult_bad': 'だららんに しんかした…',
   gotSick: 'びょうきに なっちゃった…',
+  gotWeak: 'よわっている… おせわして!',
+  recovered: 'げんきを とりもどした!',
   pooped: 'うんちを した',
   fellAsleep: 'ねむった zzz',
   wokeUp: 'めが さめた!',
@@ -331,6 +333,14 @@ function doClean() {
   afterAction();
 }
 
+// よわり(放置)と びょうき は同時に起こりうるので、両方見えるようにする
+function bodyConditionText() {
+  const parts = [];
+  if (state.weak) parts.push('よわっている 😢');
+  if (state.sick) parts.push('びょうき 🤒');
+  return parts.length ? parts.join(' / ') : 'げんき';
+}
+
 function doMeter() {
   snd.beep();
   const hearts = (n) => '♥'.repeat(n) + '♡'.repeat(E.MAX_HEARTS - n);
@@ -338,7 +348,7 @@ function doMeter() {
   openModal(`
     <h2>${charName()} のようす</h2>
     <div class="meter-row"><span>なまえ</span><b>${charName()}</b></div>
-    <div class="meter-row"><span>たいちょう</span><b>${state.sick ? 'びょうき 🤒' : 'げんき'}</b></div>
+    <div class="meter-row"><span>たいちょう</span><b>${bodyConditionText()}</b></div>
     <div class="meter-row"><span>ようす</span><b>${state.asleep ? 'ねている 💤' : 'おきてる'}</b></div>
     <div class="meter-row"><span>おなか</span><span class="hearts">${hearts(state.hunger)}</span></div>
     <div class="meter-row"><span>ごきげん</span><span class="hearts">${hearts(state.happy)}</span></div>
@@ -524,8 +534,11 @@ function handleLiveEvents(events) {
     } else if (e.type === 'disciplineCall') {
       snd.beepAttention();
       if (text) showMsg(text, 3000);
-    } else if (e.type === 'gotSick') {
+    } else if (e.type === 'gotSick' || e.type === 'gotWeak') {
       snd.beepAttention();
+      if (text) showMsg(text, 3000);
+    } else if (e.type === 'recovered') {
+      snd.beepConfirm();
       if (text) showMsg(text, 3000);
     }
   }

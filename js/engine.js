@@ -3,12 +3,12 @@
 
 export const TICK_MS = 60 * 1000;
 
-// 成長段階の境界(誕生からの経過 tick)
+// 成長段階の境界(誕生からの経過 tick)。1日ちょうどの区切りで1回ずつ進化する
 export const STAGE_BOUNDS = {
-  egg: 1,            // 1分でふ化
-  baby: 1 + 60,      // ベビー期 1時間
-  child: 1 + 60 + 2 * 1440,  // こども期 2日
-  teen: 1 + 60 + 5 * 1440,   // ティーン期 3日
+  egg: 1,             // 1分でふ化
+  baby: 1440,         // 1日目にこども
+  child: 2 * 1440,    // 2日目にティーン
+  teen: 3 * 1440,     // 3日目にアダルト
 };
 
 // 就寝・起床時刻(現地時間の hour)
@@ -25,8 +25,9 @@ const HAPPY_DECAY = 55;       // 55分でごきげんハート -1
 const POOP_INTERVAL = 170;    // 約3時間ごとにうんち
 const SICK_FROM_HUNGER = 90;  // 空腹0が90分続くと病気
 const SICK_FROM_POOP = 120;   // うんち満杯が2時間続くと病気
-const DEATH_FROM_SICK = 360;  // 病気を6時間放置で死亡
-const DEATH_FROM_HUNGER = 720;// 空腹0が12時間で死亡
+// 放置しても死なせず「よわっている」状態にする(久しぶりに開いても看病すれば助かる)
+const WEAK_FROM_SICK = 360;   // 病気を6時間放置でよわる
+const WEAK_FROM_HUNGER = 720; // 空腹0が12時間でよわる
 const MISTAKE_AFTER = 60;     // 空腹/不機嫌0を1時間放置でお世話ミス
 const LIGHT_MISTAKE_AFTER = 30; // 点灯したまま30分寝かせるとお世話ミス
 const CALL_DURATION = 30;     // しつけ呼び出しは30分でタイムアウト
@@ -63,6 +64,7 @@ export function newGame(now, generation = 1) {
     discipline: 0,
     poops: 0,
     sick: false,
+    weak: false,
     asleep: false,
     lightsOff: false,
     dead: false,
@@ -271,11 +273,24 @@ function tickOnce(state, ts) {
     }
   }
 
-  // --- 死亡判定 ---
+  // --- よわり / かいふく ---
+  // 世話をされないと死ぬのではなく「よわっている」状態になり、看病すれば元気に戻る
+  if (!state.weak) {
+    if (
+      (state.sick && state.sickTicks >= WEAK_FROM_SICK) ||
+      state.hungerZeroTicks >= WEAK_FROM_HUNGER
+    ) {
+      state.weak = true;
+      pushEvent(state, 'gotWeak', ts);
+    }
+  } else if (!state.sick && state.hunger >= 2 && state.poops === 0) {
+    state.weak = false;
+    pushEvent(state, 'recovered', ts);
+  }
+
+  // --- 死亡判定(天寿のみ)---
   let cause = null;
-  if (state.sick && state.sickTicks >= DEATH_FROM_SICK) cause = 'sickness';
-  else if (state.hungerZeroTicks >= DEATH_FROM_HUNGER) cause = 'hunger';
-  else if (state.stage === 'adult' && ageDays(state, ts) >= lifespanDays(state)) cause = 'oldAge';
+  if (state.stage === 'adult' && ageDays(state, ts) >= lifespanDays(state)) cause = 'oldAge';
 
   if (cause) {
     state.dead = true;
@@ -371,7 +386,7 @@ export function applyGameResult(state, won) {
 // お世話が必要か(アテンション表示)
 export function needsAttention(state) {
   if (state.dead || state.stage === 'egg') return false;
-  if (state.sick) return true;
+  if (state.sick || state.weak) return true;
   if (state.callActive) return true;
   if (state.poops > 0) return true;
   if (state.asleep) return !state.lightsOff;
