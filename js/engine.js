@@ -11,13 +11,17 @@ export const STAGE_BOUNDS = {
   teen: 3 * 1440,     // 3日目にアダルト
 };
 
-// 就寝・起床時刻(現地時間の hour)
+// ねむる時間帯(現地時間の hour)。この時間帯だけ、ときどき短いおひるねをする
 const SLEEP_HOURS = {
   baby: { sleep: 20, wake: 9 },
   child: { sleep: 21, wake: 9 },
   teen: { sleep: 22, wake: 8 },
   adult: { sleep: 22, wake: 8 },
 };
+
+// ねむりは実時間ベース(tick は1分刻みなので秒単位は扱えない)
+export const NAP_MS = 30 * 1000;           // ひとねむりは30秒
+export const NAP_INTERVAL_MS = 5 * 60 * 1000; // 次にねむくなるまで5分あける
 
 // パラメータ減衰などの周期(tick 数)
 const HUNGER_DECAY = 45;      // 45分でおなかハート -1
@@ -29,7 +33,6 @@ const SICK_FROM_POOP = 120;   // うんち満杯が2時間続くと病気
 const WEAK_FROM_SICK = 360;   // 病気を6時間放置でよわる
 const WEAK_FROM_HUNGER = 720; // 空腹0が12時間でよわる
 const MISTAKE_AFTER = 60;     // 空腹/不機嫌0を1時間放置でお世話ミス
-const LIGHT_MISTAKE_AFTER = 30; // 点灯したまま30分寝かせるとお世話ミス
 const CALL_DURATION = 30;     // しつけ呼び出しは30分でタイムアウト
 const CALL_HOURS = [11, 17];  // しつけ呼び出しが起きる時刻(こども/ティーン期)
 const MAX_WEIGHT_HEALTHY = 60;// これ以上太ると病気になる
@@ -78,11 +81,11 @@ export function newGame(now, generation = 1) {
     happyZeroTicks: 0,
     poopFullTicks: 0,
     sickTicks: 0,
-    lightsOnSleepTicks: 0,
+    napUntil: null,
+    napCooldownUntil: null,
     hungerMistakeGiven: false,
     happyMistakeGiven: false,
     sickMistakeGiven: false,
-    lightMistakeGiven: false,
     callActive: false,
     callTicks: 0,
     lastCallHour: null,
@@ -156,71 +159,45 @@ function tickOnce(state, ts) {
 
   if (state.stage === 'egg') return; // たまごは時間経過の影響を受けない
 
-  // --- 睡眠 ---
-  const shouldSleep = isSleepTime(state.stage, hour);
-  if (shouldSleep && !state.asleep) {
-    state.asleep = true;
-    state.lightMistakeGiven = false;
-    state.lightsOnSleepTicks = 0;
-    pushEvent(state, 'fellAsleep', ts);
-  } else if (!shouldSleep && state.asleep) {
-    state.asleep = false;
-    state.lightsOff = false; // 朝になったら電気をつける
-    state.lightsOnSleepTicks = 0;
-    pushEvent(state, 'wokeUp', ts);
+  // 睡眠は30秒のおひるね(実時間ベース)なので tick では扱わない。updateSleep() を参照。
+  // --- 減衰 ---
+  state.hungerTimer++;
+  state.happyTimer++;
+  state.poopTimer++;
+
+  if (state.hungerTimer >= HUNGER_DECAY) {
+    state.hungerTimer = 0;
+    if (state.hunger > 0) state.hunger--;
+  }
+  if (state.happyTimer >= HAPPY_DECAY) {
+    state.happyTimer = 0;
+    if (state.happy > 0) state.happy--;
+  }
+  if (state.poopTimer >= POOP_INTERVAL) {
+    state.poopTimer = 0;
+    if (state.poops < MAX_POOPS) {
+      state.poops++;
+      pushEvent(state, 'pooped', ts);
+    }
   }
 
-  if (state.asleep) {
-    // 寝ている間はおなか・ごきげんは減らないが、電気がついていると不機嫌に
-    if (!state.lightsOff) {
-      state.lightsOnSleepTicks++;
-      if (state.lightsOnSleepTicks >= LIGHT_MISTAKE_AFTER && !state.lightMistakeGiven) {
-        state.careMistakes++;
-        state.lightMistakeGiven = true;
-        state.happy = Math.max(0, state.happy - 1);
-        pushEvent(state, 'sleptWithLights', ts);
-      }
+  // --- しつけ呼び出し(こども/ティーン期、1日2回)---
+  if ((state.stage === 'child' || state.stage === 'teen') && !state.callActive) {
+    const min = new Date(ts).getMinutes();
+    if (CALL_HOURS.includes(hour) && min === 0 && state.lastCallHour !== hour + ':' + new Date(ts).getDate()) {
+      state.callActive = true;
+      state.callTicks = 0;
+      state.lastCallHour = hour + ':' + new Date(ts).getDate();
+      pushEvent(state, 'disciplineCall', ts);
     }
-  } else {
-    // --- 起きている間の減衰 ---
-    state.hungerTimer++;
-    state.happyTimer++;
-    state.poopTimer++;
-
-    if (state.hungerTimer >= HUNGER_DECAY) {
-      state.hungerTimer = 0;
-      if (state.hunger > 0) state.hunger--;
-    }
-    if (state.happyTimer >= HAPPY_DECAY) {
-      state.happyTimer = 0;
-      if (state.happy > 0) state.happy--;
-    }
-    if (state.poopTimer >= POOP_INTERVAL) {
-      state.poopTimer = 0;
-      if (state.poops < MAX_POOPS) {
-        state.poops++;
-        pushEvent(state, 'pooped', ts);
-      }
-    }
-
-    // --- しつけ呼び出し(こども/ティーン期、1日2回)---
-    if ((state.stage === 'child' || state.stage === 'teen') && !state.callActive) {
-      const min = new Date(ts).getMinutes();
-      if (CALL_HOURS.includes(hour) && min === 0 && state.lastCallHour !== hour + ':' + new Date(ts).getDate()) {
-        state.callActive = true;
-        state.callTicks = 0;
-        state.lastCallHour = hour + ':' + new Date(ts).getDate();
-        pushEvent(state, 'disciplineCall', ts);
-      }
-    }
-    if (state.callActive) {
-      state.callTicks++;
-      if (state.callTicks >= CALL_DURATION) {
-        state.callActive = false;
-        state.careMistakes++;
-        state.happy = Math.max(0, state.happy - 1);
-        pushEvent(state, 'callIgnored', ts);
-      }
+  }
+  if (state.callActive) {
+    state.callTicks++;
+    if (state.callTicks >= CALL_DURATION) {
+      state.callActive = false;
+      state.careMistakes++;
+      state.happy = Math.max(0, state.happy - 1);
+      pushEvent(state, 'callIgnored', ts);
     }
   }
 
@@ -301,6 +278,47 @@ function tickOnce(state, ts) {
   }
 }
 
+// おひるね(実時間ベース)。毎秒呼び出し、状態が変わったら true を返す。
+// 夜の時間帯に ときどき 30秒だけ ねむる。長時間ねて遊べなくならないようにするため。
+export function updateSleep(state, now) {
+  if (state.dead || state.stage === 'egg') {
+    if (!state.asleep) return false;
+    state.asleep = false;
+    return true;
+  }
+
+  // ねむっている最中
+  if (state.napUntil != null && now < state.napUntil) {
+    if (state.asleep) return false;
+    state.asleep = true;
+    return true;
+  }
+
+  // 目が覚めた
+  if (state.asleep || state.napUntil != null) {
+    const wasAsleep = state.asleep;
+    state.asleep = false;
+    state.napUntil = null;
+    state.napCooldownUntil = now + NAP_INTERVAL_MS;
+    if (wasAsleep) {
+      state.lightsOff = false; // 起きたら電気をつける
+      pushEvent(state, 'wokeUp', now);
+      return true;
+    }
+    return false;
+  }
+
+  // 夜の時間帯なら、しばらくぶりに ねむくなる
+  const sleepy = isSleepTime(state.stage, new Date(now).getHours());
+  if (sleepy && (state.napCooldownUntil == null || now >= state.napCooldownUntil)) {
+    state.asleep = true;
+    state.napUntil = now + NAP_MS;
+    pushEvent(state, 'fellAsleep', now);
+    return true;
+  }
+  return false;
+}
+
 // lastTick から now までを1分刻みでシミュレートする(通常運転もオフライン復帰も同じ経路)
 export function catchUp(state, now) {
   let processed = 0;
@@ -362,7 +380,6 @@ export function giveMedicine(state) {
 export function toggleLight(state) {
   if (state.dead) return 'unavailable';
   state.lightsOff = !state.lightsOff;
-  if (state.lightsOff && state.asleep) state.lightsOnSleepTicks = 0;
   return state.lightsOff ? 'off' : 'on';
 }
 

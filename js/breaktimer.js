@@ -2,7 +2,7 @@
 // アプリを閉じても localStorage 経由で継続するよう、main.js が session を毎秒 tick() する。
 
 export const PLAY_MS = 5 * 60 * 1000;
-export const BREAK_MS = 10 * 60 * 1000;
+export const BREAK_MS = 5 * 60 * 1000;
 
 export function newSession() {
   return { playStartAt: null, breakUntil: null };

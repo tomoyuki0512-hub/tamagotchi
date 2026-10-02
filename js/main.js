@@ -600,7 +600,17 @@ function gameTick() {
   }
 }
 
-// ---- 休憩タイマー(5分あそんだら10分操作不能に)----
+// おひるねは30秒単位なので、tick(1分)とは別に毎秒みる
+function sleepTick() {
+  if (!E.updateSleep(state, Date.now())) return;
+  const events = state.events.splice(0);
+  handleLiveEvents(events);
+  saveGame(state);
+  updateHUD();
+  draw();
+}
+
+// ---- 休憩タイマー(5分あそんだら5分操作不能に)----
 
 function blockedByBreak() {
   return BT.isOnBreak(playSession, Date.now());
@@ -718,12 +728,16 @@ function init() {
   }
 
   bindInputs();
+  E.updateSleep(state, Date.now()); // 旧セーブの「ずっと寝ている」状態をここで解消する
+  state.events.splice(0);
+  saveGame(state);
   updateHUD();
   updatePlayTimer();
   draw();
 
   setInterval(gameTick, 1000);           // 1秒ごとに実時間と同期
-  setInterval(updatePlayTimer, 1000);    // 5分あそんだら10分休憩
+  setInterval(sleepTick, 1000);          // 30秒のおひるね判定
+  setInterval(updatePlayTimer, 1000);    // 5分あそんだら休憩
   setInterval(() => { frame ^= 1; draw(); }, 500); // アニメーション
 
   document.addEventListener('visibilitychange', () => {
@@ -739,6 +753,7 @@ function init() {
     }
     updateHUD();
     updatePlayTimer();
+    sleepTick();
     draw();
   });
 

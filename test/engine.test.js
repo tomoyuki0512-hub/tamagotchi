@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   newGame, catchUp, feedMeal, feedSnack, cleanPoop, giveMedicine,
   toggleLight, disciplinePet, applyGameResult, needsAttention,
-  nextGeneration, patPet, TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
+  nextGeneration, patPet, updateSleep, TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
+  NAP_MS, NAP_INTERVAL_MS,
 } from '../js/engine.js';
 
 // 現地時間の指定時刻でタイムスタンプを作る(睡眠判定が現地時間ベースのため)
@@ -119,28 +120,82 @@ test('太りすぎると病気になる', () => {
   assert.equal(s.sick, true);
 });
 
-test('夜になると寝て、朝起きる。電気を消し忘れるとお世話ミス', () => {
-  const s = newGame(at(19, 30)); // 19:35 ふ化(ベビー期は1時間)
-  catchUp(s, at(19, 40));
+test('夜はときどき30秒だけねむる', () => {
+  const s = newGame(at(19, 30));
+  catchUp(s, at(20, 10)); // ベビーの夜は20時から
+  const night = at(20, 10);
+
+  // 昼間はねむらない
+  s.asleep = false; s.napUntil = null; s.napCooldownUntil = null;
+  assert.equal(updateSleep(s, at(12, 0)), false);
   assert.equal(s.asleep, false);
-  catchUp(s, at(20, 10)); // ベビーは20時就寝
+
+  // 夜になるとねむる
+  assert.equal(updateSleep(s, night), true);
   assert.equal(s.asleep, true);
-  const m = s.careMistakes;
-  catchUp(s, at(20, 32)); // 電気つけっぱなしで30分以上
-  assert.equal(s.careMistakes, m + 1);
-  // 翌朝9時に起きる(その頃にはこどもに進化している)
-  catchUp(s, new Date(2026, 6, 14, 9, 5).getTime());
+  assert.ok(s.events.some(e => e.type === 'fellAsleep'));
+
+  // 30秒たつ前はまだねている
+  updateSleep(s, night + 29 * 1000);
+  assert.equal(s.asleep, true);
+
+  // 30秒で目が覚める
+  assert.equal(updateSleep(s, night + NAP_MS), true);
   assert.equal(s.asleep, false);
+  assert.ok(s.events.some(e => e.type === 'wokeUp'));
 });
 
-test('寝ている間はおなかが減らない(消灯時)', () => {
-  const s = newGame(at(20, 30)); // 20:35 ふ化 → ベビーは即就寝
-  catchUp(s, at(20, 40));
+test('ねむりから覚めたあとは、しばらくねむらない(遊びを邪魔しない)', () => {
+  const s = newGame(at(19, 30));
+  catchUp(s, at(20, 10));
+  const night = at(20, 10);
+
+  s.asleep = false; s.napUntil = null; s.napCooldownUntil = null;
+  updateSleep(s, night);              // ねむる
+  updateSleep(s, night + NAP_MS);     // 起きる
+  assert.equal(s.asleep, false);
+
+  // インターバル中はねむらない
+  updateSleep(s, night + NAP_MS + 60 * 1000);
+  assert.equal(s.asleep, false, '1分後はまだ起きている');
+
+  // インターバルを過ぎたらまたねむる
+  updateSleep(s, night + NAP_MS + NAP_INTERVAL_MS);
   assert.equal(s.asleep, true);
+});
+
+test('起きると電気はついた状態に戻る', () => {
+  const s = newGame(at(19, 30));
+  catchUp(s, at(20, 10));
+  const night = at(20, 10);
+
+  s.asleep = false; s.napUntil = null; s.napCooldownUntil = null;
+  updateSleep(s, night);
   toggleLight(s);
+  assert.equal(s.lightsOff, true);
+  updateSleep(s, night + NAP_MS);
+  assert.equal(s.lightsOff, false);
+});
+
+test('ねむっていてもおなかは減り続ける(30秒なので実質影響なし)', () => {
+  const s = newGame(at(20, 30));
+  catchUp(s, at(20, 40));
   const h = s.hunger;
-  catchUp(s, at(23, 0));
-  assert.equal(s.hunger, h);
+  catchUp(s, at(23, 30)); // 3時間
+  assert.ok(s.hunger < h, '夜でも時間は進む');
+});
+
+test('たまご・死亡中はねむらない', () => {
+  const egg = newGame(at(21));
+  assert.equal(updateSleep(egg, at(21)), false);
+  assert.equal(egg.asleep, false);
+
+  const dead = newGame(at(21));
+  catchUp(dead, at(21, 10));
+  dead.dead = true;
+  dead.asleep = true;
+  assert.equal(updateSleep(dead, at(21, 10)), true);
+  assert.equal(dead.asleep, false);
 });
 
 test('成長: ベビー→こども→ティーン→アダルト', () => {
@@ -292,9 +347,10 @@ test('ごきげんが満タンでもなでられる(上限で頭打ち)', () => 
   assert.equal(s.happy, MAX_HEARTS);
 });
 
-test('寝ている間になでてもごきげんは変わらない', () => {
+test('ねむっている間になでてもごきげんは変わらない', () => {
   const s = newGame(at(20, 30));
   catchUp(s, at(20, 40));
+  updateSleep(s, at(20, 40)); // 夜なのでねむる
   assert.equal(s.asleep, true);
   const h = s.happy;
   assert.equal(patPet(s, s.lastTick), 'asleep');
