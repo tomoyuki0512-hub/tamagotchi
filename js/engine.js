@@ -42,6 +42,17 @@ export const MAX_HEARTS = 4;
 export const MAX_POOPS = 4;
 export const PAT_COOLDOWN_MS = 3 * 60 * 1000; // なでる効果は3分に1回まで
 
+// たべもの。おなか系(meal)は満腹だと断られ、おやつ系(snack)はごきげん重視でふとりやすい。
+// たくさん食べさせるほど たいじゅう が増え、増えすぎると病気になる。
+export const FOODS = {
+  salad:   { id: 'salad',   name: 'サラダ',   emoji: '🥗', kind: 'meal',  hunger: 1, happy: 0, weight: 0 },
+  rice:    { id: 'rice',    name: 'ごはん',   emoji: '🍚', kind: 'meal',  hunger: 2, happy: 0, weight: 2 },
+  nikuman: { id: 'nikuman', name: 'にくまん', emoji: '🍖', kind: 'meal',  hunger: 3, happy: 0, weight: 4 },
+  berry:   { id: 'berry',   name: 'いちご',   emoji: '🍓', kind: 'snack', hunger: 0, happy: 1, weight: 1 },
+  pudding: { id: 'pudding', name: 'プリン',   emoji: '🍮', kind: 'snack', hunger: 0, happy: 2, weight: 2 },
+  cake:    { id: 'cake',    name: 'ケーキ',   emoji: '🍰', kind: 'snack', hunger: 0, happy: 3, weight: 4 },
+};
+
 // キャラクター定義(オリジナルキャラ)
 export const CHARACTERS = {
   egg: { id: 'egg', name: 'たまご' },
@@ -337,18 +348,15 @@ function canAct(state) {
   return !state.dead && state.stage !== 'egg' && !state.asleep;
 }
 
-export function feedMeal(state) {
+export function feedFood(state, foodId) {
+  const food = FOODS[foodId];
+  if (!food) return 'unavailable';
   if (!canAct(state)) return 'unavailable';
-  if (state.hunger >= MAX_HEARTS) return 'refused';
-  state.hunger++;
-  state.weight++;
-  return 'ok';
-}
-
-export function feedSnack(state) {
-  if (!canAct(state)) return 'unavailable';
-  state.happy = Math.min(MAX_HEARTS, state.happy + 1);
-  state.weight += 2;
+  // おなかを満たす系は満腹だと食べてくれない(おやつは別腹)
+  if (food.kind === 'meal' && state.hunger >= MAX_HEARTS) return 'refused';
+  state.hunger = Math.min(MAX_HEARTS, state.hunger + food.hunger);
+  state.happy = Math.min(MAX_HEARTS, state.happy + food.happy);
+  state.weight = Math.max(MIN_WEIGHT, state.weight + food.weight);
   return 'ok';
 }
 

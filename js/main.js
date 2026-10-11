@@ -5,6 +5,8 @@ import { setupCanvas, renderScene } from './render.js';
 import { saveGame, loadGame, clearGame, loadSettings, saveSettings, loadRecords, saveRecords, loadPlaySession, savePlaySession } from './storage.js';
 import * as snd from './sound.js';
 import * as MG from './minigame.js';
+import * as MEM from './memorygame.js';
+import * as HL from './highlow.js';
 import * as BT from './breaktimer.js';
 
 let state;
@@ -17,6 +19,8 @@ let overlay = null;        // 'meal' | 'snack' | null(食事アニメ)
 let overlayUntil = 0;
 let selectedIcon = -1;     // A/B ボタン用の選択位置
 let match = null;          // ミニゲームの進行状態
+let memMatch = null;       // まねっこゲーム
+let hlMatch = null;        // たかいひくいゲーム
 let prevAttention = false;
 let deathShown = false;
 let msgTimer = null;
@@ -90,6 +94,8 @@ function closeModal() {
   $('#modal-overlay').classList.add('hidden');
   $('#modal-content').innerHTML = '';
   match = null;
+  memMatch = null;
+  hlMatch = null;
   stopGameTimers();
 }
 
@@ -111,27 +117,41 @@ function canInteract() {
   return !state.dead && state.stage !== 'egg' && !state.asleep;
 }
 
+function foodButton(food) {
+  const effect = food.kind === 'meal' ? `おなか +${food.hunger}` : `ごきげん +${food.happy}`;
+  const weight = food.weight === 0 ? 'ふとらない' : `たいじゅう +${food.weight}`;
+  return `<button class="m-btn food" data-food="${food.id}">
+    <span class="food-name">${food.emoji} ${food.name}</span>
+    <span class="food-effect">${effect} / ${weight}</span>
+  </button>`;
+}
+
 function doFeed() {
   if (!canInteract()) return showMsg(feedBlockedMsg());
+  const foods = Object.values(E.FOODS);
+  const meals = foods.filter((f) => f.kind === 'meal').map(foodButton).join('');
+  const snacks = foods.filter((f) => f.kind === 'snack').map(foodButton).join('');
   const c = openModal(`
     <h2>なにを あげる?</h2>
+    <div class="food-group-label">🍽 ごはん</div>
+    <div class="modal-buttons">${meals}</div>
+    <div class="food-group-label">🍬 おやつ</div>
+    <div class="modal-buttons">${snacks}</div>
     <div class="modal-buttons">
-      <button class="m-btn" data-food="meal">🍚 ごはん (おなか +1)</button>
-      <button class="m-btn" data-food="snack">🍰 おやつ (ごきげん +1 / ふとりやすい)</button>
       <button class="m-btn secondary" data-close>やめる</button>
     </div>`);
   c.querySelectorAll('[data-food]').forEach((b) => b.addEventListener('click', () => {
-    const kind = b.dataset.food;
-    const result = kind === 'meal' ? E.feedMeal(state) : E.feedSnack(state);
+    const food = E.FOODS[b.dataset.food];
+    const result = E.feedFood(state, food.id);
     closeModal();
     if (result === 'refused') {
       snd.beepCancel();
       showMsg('おなかいっぱい みたい');
     } else if (result === 'ok') {
       snd.beepConfirm();
-      overlay = kind;
+      overlay = food.kind;
       overlayUntil = Date.now() + 1600;
-      showMsg(kind === 'meal' ? 'もぐもぐ…' : 'おやつに おおよろこび!');
+      showMsg(food.kind === 'meal' ? `${food.name}を もぐもぐ…` : `${food.name}に おおよろこび!`);
     }
     afterAction();
   }));
@@ -155,6 +175,8 @@ function doLight() {
 
 let matchHistory = [];
 let matchReactionTimes = []; // ヒット時の反応時間(ms)。ヒット以外は null
+let memHistory = [];         // まねっこの各ラウンド結果
+let hlHistory = [];          // たかいひくいの各ラウンド結果
 let revealAt = 0;            // 合図(reveal)が出た時刻
 let gameRevealTimer = null;
 let gameWindowTimer = null;
@@ -167,8 +189,59 @@ function stopGameTimers() {
   gameRevealTimer = gameWindowTimer = gameAdvanceTimer = null;
 }
 
+// あそぶ: 3種類からえらぶ
+const GAMES = [
+  { id: 'reflex', emoji: '⚡', name: 'みぎひだり', hint: 'ひかったほうを すぐ おす' },
+  { id: 'memory', emoji: '🧠', name: 'まねっこ',   hint: 'ひかった じゅんばんを おぼえる' },
+  { id: 'highlow', emoji: '🔢', name: 'たかい ひくい', hint: 'つぎの すうじを よそうする' },
+];
+
 function doGame() {
   if (!canInteract()) return showMsg(feedBlockedMsg());
+  const buttons = GAMES.map((g) => `
+    <button class="m-btn food" data-game="${g.id}">
+      <span class="food-name">${g.emoji} ${g.name}</span>
+      <span class="food-effect">${g.hint}</span>
+    </button>`).join('');
+  const c = openModal(`
+    <h2>なにで あそぶ?</h2>
+    <div class="modal-buttons">${buttons}</div>
+    <div class="modal-buttons">
+      <button class="m-btn secondary" data-close>やめる</button>
+    </div>`);
+  c.querySelectorAll('[data-game]').forEach((b) => b.addEventListener('click', () => {
+    snd.beep();
+    const id = b.dataset.game;
+    if (id === 'reflex') startReflexGame();
+    else if (id === 'memory') startMemoryGame();
+    else startHighLowGame();
+  }));
+  c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
+}
+
+// ゲーム共通: 勝敗をペットに反映し、きろくを更新して結果画面を出す
+function finishGame(title, won, detailHtml) {
+  E.applyGameResult(state, won);
+  if (won) snd.jingleWin();
+  records.gamesPlayed++;
+  if (won) records.gamesWon++;
+  saveRecords(records);
+  afterAction();
+
+  gameAdvanceTimer = setTimeout(() => {
+    const c = openModal(`
+      <h2>${won ? '🎉 かち!' : 'まけ…'}</h2>
+      <div id="game-status">${detailHtml}${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
+      <div class="modal-buttons">
+        <button class="m-btn" data-again>${title}を もういちど</button>
+        <button class="m-btn secondary" data-close>おわる</button>
+      </div>`);
+    c.querySelector('[data-close]').addEventListener('click', () => { snd.beep(); closeModal(); });
+    c.querySelector('[data-again]').addEventListener('click', () => { snd.beep(); doGame(); });
+  }, 900);
+}
+
+function startReflexGame() {
   match = MG.newMatch();
   matchHistory = [];
   matchReactionTimes = [];
@@ -219,14 +292,25 @@ function finishRoundUI(reason, reactionMs) {
   const text = reason === 'hit' ? `せいかい! ○ (${reactionMs}ms)` : ROUND_RESULT_TEXT[reason];
   renderGameModal(text);
   if (match.finished) {
-    const won = match.won;
-    E.applyGameResult(state, won);
-    if (won) snd.jingleWin();
-    afterAction();
-    gameAdvanceTimer = setTimeout(() => renderGameResult(won), 900);
+    finishReflexGame();
   } else {
     gameAdvanceTimer = setTimeout(runRound, 900);
   }
+}
+
+function finishReflexGame() {
+  const hitTimes = matchReactionTimes.filter((t) => t != null);
+  const avg = hitTimes.length ? Math.round(hitTimes.reduce((a, b) => a + b, 0) / hitTimes.length) : null;
+  const rank = avg == null ? null : avg < 350 ? 'S' : avg < 500 ? 'A' : avg < 650 ? 'B' : 'C';
+
+  let bestUpdated = false;
+  if (match.won && avg != null && (records.bestAvgReactionMs == null || avg < records.bestAvgReactionMs)) {
+    records.bestAvgReactionMs = avg;
+    bestUpdated = true;
+  }
+  const avgLine = avg != null ? `へいきん はんのう: ${avg}ms (${rank}ランク)<br>` : '';
+  const bestLine = bestUpdated ? '🏆 じこベスト こうしん!<br>' : '';
+  finishGame('みぎひだり', match.won, `${match.wins}かい せいかい した!<br>${avgLine}${bestLine}`);
 }
 
 // resultText を渡すとその文言を、渡さなければ match.phase から表示内容を組み立てる
@@ -281,31 +365,147 @@ function startBarAnimation(durationMs) {
   fill.style.width = '0%';
 }
 
-function renderGameResult(won) {
-  const wins = match.wins;
-  const hitTimes = matchReactionTimes.filter((t) => t != null);
-  const avg = hitTimes.length ? Math.round(hitTimes.reduce((a, b) => a + b, 0) / hitTimes.length) : null;
-  const rank = avg == null ? null : avg < 350 ? 'S' : avg < 500 ? 'A' : avg < 650 ? 'B' : 'C';
+// ---- まねっこゲーム(記憶力)----
 
-  records.gamesPlayed++;
-  if (won) records.gamesWon++;
-  let bestUpdated = false;
-  if (won && avg != null && (records.bestAvgReactionMs == null || avg < records.bestAvgReactionMs)) {
-    records.bestAvgReactionMs = avg;
-    bestUpdated = true;
+function startMemoryGame() {
+  memMatch = MEM.newMatch();
+  memHistory = [];
+  runMemoryRound();
+}
+
+function runMemoryRound() {
+  MEM.startRound(memMatch);
+  renderMemoryModal('よく みててね…');
+  playMemorySequence(0);
+}
+
+// 出題を1つずつ光らせ、終わったら入力を受け付ける
+function playMemorySequence(i) {
+  if (!memMatch) return;
+  if (i >= memMatch.sequence.length) {
+    MEM.beginInput(memMatch);
+    renderMemoryModal('おなじ じゅんばんに おして!');
+    return;
   }
-  saveRecords(records);
+  const side = memMatch.sequence[i];
+  snd.beep();
+  renderMemoryModal('よく みててね…', side);
+  gameAdvanceTimer = setTimeout(() => {
+    if (!memMatch) return;
+    renderMemoryModal('よく みててね…');
+    gameAdvanceTimer = setTimeout(() => playMemorySequence(i + 1), MEM.FLASH_GAP_MS);
+  }, MEM.FLASH_MS);
+}
 
-  const avgLine = avg != null ? `へいきん はんのう: ${avg}ms (${rank}ランク)<br>` : '';
-  const bestLine = bestUpdated ? '🏆 じこベスト こうしん!<br>' : '';
+function handleMemoryPress(side) {
+  if (!memMatch) return;
+  const r = MEM.pressKey(memMatch, side);
+  if (r === 'ignored') return;
+
+  if (r === 'progress') {
+    snd.beep();
+    renderMemoryModal('おなじ じゅんばんに おして!', side);
+    gameAdvanceTimer = setTimeout(() => {
+      if (memMatch && memMatch.phase === 'input') renderMemoryModal('おなじ じゅんばんに おして!');
+    }, 160);
+    return;
+  }
+
+  const success = r === 'roundWon';
+  memHistory[memMatch.round - 1] = success;
+  (success ? snd.beepConfirm : snd.beepCancel)();
+  renderMemoryModal(success ? 'せいかい! ○' : 'ちがった… ×');
+  if (memMatch.finished) {
+    finishGame('まねっこ', memMatch.won, `${memMatch.wins}かい せいかい した!<br>`);
+  } else {
+    gameAdvanceTimer = setTimeout(runMemoryRound, 900);
+  }
+}
+
+// litSide を渡すと、その側のボタンを光らせる
+function renderMemoryModal(status, litSide) {
+  const dots = Array.from({ length: MEM.ROUNDS }, (_, i) => (
+    i >= memMatch.round ? '・' : (memHistory[i] ? '○' : '×')
+  )).join('');
+  const leftLit = litSide === 'left' ? ' lit' : '';
+  const rightLit = litSide === 'right' ? ' lit' : '';
+  const progress = memMatch.phase === 'input'
+    ? `${memMatch.inputIndex} / ${memMatch.sequence.length}`
+    : `${memMatch.sequence.length}こ`;
 
   const c = openModal(`
-    <h2>${won ? '🎉 かち!' : 'まけ…'}</h2>
-    <div id="game-status">${wins}かい せいかい した!<br>${avgLine}${bestLine}${won ? 'ごきげんアップ &amp; うんどうに なった!' : 'でも いいうんどうに なった!'}</div>
+    <h2>まねっこ (${memMatch.round}/${MEM.ROUNDS})</h2>
+    <div id="game-status">${status}</div>
+    <div id="game-rounds">${progress}</div>
+    <div class="modal-buttons row">
+      <button class="m-btn big${leftLit}" data-mem="left">◀ ひだり</button>
+      <button class="m-btn big${rightLit}" data-mem="right">みぎ ▶</button>
+    </div>
+    <div id="game-rounds">${dots}</div>
     <div class="modal-buttons">
-      <button class="m-btn" data-close>おわる</button>
+      <button class="m-btn secondary" data-close>やめる</button>
     </div>`);
-  c.querySelector('[data-close]').addEventListener('click', () => { snd.beep(); closeModal(); });
+
+  c.querySelectorAll('[data-mem]').forEach((b) => b.addEventListener('click', () => handleMemoryPress(b.dataset.mem)));
+  c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
+}
+
+// ---- たかい ひくい ゲーム(うんだめし)----
+
+function startHighLowGame() {
+  hlMatch = HL.newMatch();
+  hlHistory = [];
+  runHighLowRound();
+}
+
+function runHighLowRound() {
+  HL.startRound(hlMatch);
+  renderHighLowModal('つぎの すうじは たかい? ひくい?');
+}
+
+function handleHighLowGuess(choice) {
+  if (!hlMatch) return;
+  const r = HL.guess(hlMatch, choice);
+  if (r === 'ignored') return;
+
+  const success = r === 'hit';
+  hlHistory[hlMatch.round - 1] = success;
+  (success ? snd.beepConfirm : snd.beepCancel)();
+  renderHighLowModal(success ? 'あたり! ○' : 'はずれ… ×');
+  if (hlMatch.finished) {
+    finishGame('たかい ひくい', hlMatch.won, `${hlMatch.wins}かい あてた!<br>`);
+  } else {
+    gameAdvanceTimer = setTimeout(runHighLowRound, 1100);
+  }
+}
+
+function renderHighLowModal(status) {
+  const dots = Array.from({ length: HL.ROUNDS }, (_, i) => (
+    i >= hlHistory.length ? '・' : (hlHistory[i] ? '○' : '×')
+  )).join('');
+  // 答えたあとは伏せてあった数字を見せる
+  const revealed = hlMatch.phase === 'result';
+  const hiddenFace = revealed ? String(hlMatch.hidden) : '?';
+
+  const c = openModal(`
+    <h2>たかい ひくい (${hlMatch.round}/${HL.ROUNDS})</h2>
+    <div id="game-status">${status}</div>
+    <div class="hl-cards">
+      <div class="hl-card">${hlMatch.shown}</div>
+      <div class="hl-vs">vs</div>
+      <div class="hl-card${revealed ? ' revealed' : ' hidden-card'}">${hiddenFace}</div>
+    </div>
+    <div class="modal-buttons row">
+      <button class="m-btn big" data-hl="high">▲ たかい</button>
+      <button class="m-btn big" data-hl="low">▼ ひくい</button>
+    </div>
+    <div id="game-rounds">${dots}</div>
+    <div class="modal-buttons">
+      <button class="m-btn secondary" data-close>やめる</button>
+    </div>`);
+
+  c.querySelectorAll('[data-hl]').forEach((b) => b.addEventListener('click', () => handleHighLowGuess(b.dataset.hl)));
+  c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
 }
 
 function doMedicine() {

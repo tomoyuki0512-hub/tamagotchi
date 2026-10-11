@@ -1,7 +1,7 @@
 // sw.js — オフライン用 Service Worker(キャッシュファースト)
 // リリースのたびに CACHE_VERSION を上げると全端末のキャッシュが更新される。
 
-const CACHE_VERSION = 'picotchi-v6';
+const CACHE_VERSION = 'picotchi-v7';
 
 const ASSETS = [
   './',
@@ -15,6 +15,8 @@ const ASSETS = [
   './js/storage.js',
   './js/sound.js',
   './js/minigame.js',
+  './js/memorygame.js',
+  './js/highlow.js',
   './js/breaktimer.js',
   './icons/icon-192.png',
   './icons/icon-512.png',

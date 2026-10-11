@@ -335,6 +335,64 @@ body.theme-retro #screen-wrap::after {
 
 .bar.wide { width: 100%; margin: 4px 0 10px; }
 
+/* たべもの・ゲームえらび(名前 + 効果の2段ボタン) */
+.m-btn.food {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 11px 14px;
+  text-align: left;
+}
+
+.food-name { font-size: 1.05rem; }
+.food-effect { font-size: 0.78rem; font-weight: normal; opacity: 0.85; }
+
+.food-group-label {
+  font-size: 0.82rem;
+  font-weight: bold;
+  opacity: 0.7;
+  margin: 10px 0 2px;
+}
+.food-group-label:first-of-type { margin-top: 0; }
+
+/* たかいひくい の カード */
+.hl-cards {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 10px 0 14px;
+}
+
+.hl-card {
+  width: 64px;
+  height: 84px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  font-weight: bold;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.hl-card.hidden-card {
+  background: color-mix(in srgb, var(--modal-fg) 18%, transparent);
+  color: var(--modal-fg);
+}
+
+.hl-card.revealed { animation: hl-flip 0.3s ease; }
+
+@keyframes hl-flip {
+  from { transform: rotateY(90deg) scale(0.9); }
+  to { transform: rotateY(0) scale(1); }
+}
+
+.hl-vs { font-size: 0.9rem; opacity: 0.6; font-weight: bold; }
+
 /* メーター画面 */
 .meter-row {
   display: flex;

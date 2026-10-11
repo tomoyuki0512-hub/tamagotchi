@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  newGame, catchUp, feedMeal, feedSnack, cleanPoop, giveMedicine,
+  newGame, catchUp, feedFood, FOODS, cleanPoop, giveMedicine,
   toggleLight, disciplinePet, applyGameResult, needsAttention,
   nextGeneration, patPet, updateSleep, TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
   NAP_MS, NAP_INTERVAL_MS,
@@ -40,24 +40,66 @@ test('起きている間におなかとごきげんが減る', () => {
   assert.ok(s.hunger < h0, 'おなかが減っているはず');
 });
 
-test('ごはんでおなか回復・体重増加、満腹なら拒否', () => {
-  const s = newGame(at(9));
-  advance(s, 10);
-  const w = s.weight;
-  assert.equal(feedMeal(s), 'ok');
-  assert.equal(s.weight, w + 1);
-  s.hunger = MAX_HEARTS;
-  assert.equal(feedMeal(s), 'refused');
+test('ごはん系はおなかと体重が FOODS の定義どおり増える', () => {
+  for (const food of Object.values(FOODS).filter((f) => f.kind === 'meal')) {
+    const s = newGame(at(9));
+    advance(s, 10);
+    s.hunger = 0;
+    const w = s.weight;
+    assert.equal(feedFood(s, food.id), 'ok', food.name);
+    assert.equal(s.hunger, food.hunger, `${food.name} のおなか`);
+    assert.equal(s.weight, w + food.weight, `${food.name} のたいじゅう`);
+  }
 });
 
-test('おやつでごきげん回復・体重+2', () => {
+test('おやつ系はごきげんと体重が FOODS の定義どおり増える', () => {
+  for (const food of Object.values(FOODS).filter((f) => f.kind === 'snack')) {
+    const s = newGame(at(9));
+    advance(s, 10);
+    s.happy = 0;
+    const w = s.weight;
+    assert.equal(feedFood(s, food.id), 'ok', food.name);
+    assert.equal(s.happy, food.happy, `${food.name} のごきげん`);
+    assert.equal(s.weight, w + food.weight, `${food.name} のたいじゅう`);
+  }
+});
+
+test('ごはん系は満腹だと断られるが、おやつは別腹', () => {
   const s = newGame(at(9));
   advance(s, 10);
-  s.happy = 1;
+  s.hunger = MAX_HEARTS;
+  assert.equal(feedFood(s, 'rice'), 'refused');
+  assert.equal(feedFood(s, 'salad'), 'refused');
+  assert.equal(feedFood(s, 'cake'), 'ok', 'おやつは満腹でも食べられる');
+});
+
+test('おなか・ごきげんはハートの上限を超えない', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.hunger = MAX_HEARTS - 1;
+  s.happy = MAX_HEARTS - 1;
+  feedFood(s, 'nikuman'); // おなか +3
+  feedFood(s, 'cake');    // ごきげん +3
+  assert.equal(s.hunger, MAX_HEARTS);
+  assert.equal(s.happy, MAX_HEARTS);
+});
+
+test('知らないたべものは受け付けない', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  assert.equal(feedFood(s, 'pizza'), 'unavailable');
+});
+
+test('サラダはふとらない、にくまんはよくふとる', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  s.hunger = 0;
   const w = s.weight;
-  assert.equal(feedSnack(s), 'ok');
-  assert.equal(s.happy, 2);
-  assert.equal(s.weight, w + 2);
+  feedFood(s, 'salad');
+  assert.equal(s.weight, w, 'サラダは体重が変わらない');
+  s.hunger = 0;
+  feedFood(s, 'nikuman');
+  assert.equal(s.weight, w + 4);
 });
 
 test('時間経過でうんちが出て、掃除できる', () => {
@@ -97,7 +139,7 @@ test('よわっていても看病すれば元気に戻る', () => {
 
   giveMedicine(s);
   cleanPoop(s);
-  while (feedMeal(s) === 'ok');
+  while (feedFood(s, 'rice') === 'ok');
   advance(s, 1);
   assert.equal(s.weak, false);
   assert.ok(s.events.some(e => e.type === 'recovered'));
@@ -115,7 +157,7 @@ test('空腹を12時間放置しても死なずによわるだけ', () => {
 test('太りすぎると病気になる', () => {
   const s = newGame(at(9));
   advance(s, 10);
-  for (let i = 0; i < 30; i++) feedSnack(s); // 体重 +60
+  for (let i = 0; i < 15; i++) feedFood(s, 'cake'); // 体重 +60
   advance(s, 1);
   assert.equal(s.sick, true);
 });
@@ -202,7 +244,7 @@ test('成長: ベビー→こども→ティーン→アダルト', () => {
   const s = newGame(at(9));
   // 減衰で死なないよう、世話をしながら進める
   const feed = () => {
-    while (feedMeal(s) === 'ok');
+    while (feedFood(s, 'rice') === 'ok');
     s.happy = MAX_HEARTS;
     cleanPoop(s);
     s.weight = 20;
@@ -233,7 +275,7 @@ test('良いお世話ならきらりんに進化', () => {
   s.careMistakes = 0;
   // ティーン期の終わり直前まで一気に(世話をしながら)
   const feed = () => {
-    while (feedMeal(s) === 'ok');
+    while (feedFood(s, 'rice') === 'ok');
     s.happy = MAX_HEARTS;
     cleanPoop(s);
     s.weight = 20;
@@ -250,7 +292,7 @@ test('良いお世話ならきらりんに進化', () => {
 test('世話が悪いとだららんに進化', () => {
   const s = newGame(at(9));
   const feed = () => {
-    while (feedMeal(s) === 'ok');
+    while (feedFood(s, 'rice') === 'ok');
     s.happy = MAX_HEARTS;
     cleanPoop(s);
     s.weight = 20;
