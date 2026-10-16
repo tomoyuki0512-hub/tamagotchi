@@ -15,7 +15,9 @@
 - アプリを閉じている間も時間が進む(開くと「留守中ダイジェスト」を表示)
 - きせかえ: **レトロ液晶** ⇔ **モダンかわいい** の2テーマ
 - 通信不要・完全オフライン動作(セーブはブラウザ内 localStorage)
-- 5分あそんだら5分間の休憩タイム(アプリを閉じても継続、遊びすぎ防止)
+- 5分あそんだら5分間の休憩タイム(遊びすぎ防止)。
+  「あそんだ時間」はアプリを開いていたあいだだけ数えるので、
+  久しぶりに開いていきなり休憩になることはない
 
 ## 遊べるようにする手順(初回だけ)
 
@@ -77,7 +79,7 @@ js/minigame.js        みぎひだり はんしゃゲーム(反射)
 js/memorygame.js      まねっこゲーム(記憶)
 js/highlow.js         たかいひくいゲーム(運)
 js/mathgame.js        たしざんゲーム(けいさん)
-js/breaktimer.js      5分あそんだら5分休憩、のロジック
+js/breaktimer.js      5分あそんだら5分休憩、のロジック(あそんだ時間を積み上げる)
 sw.js                 Service Worker(オフラインキャッシュ)
 manifest.webmanifest  PWA マニフェスト
 test/                 ロジックのユニットテスト(engine/minigame/memorygame/highlow/mathgame/breaktimer)

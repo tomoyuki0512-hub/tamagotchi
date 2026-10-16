@@ -922,13 +922,21 @@ function hideBreakOverlay() {
   $('#break-overlay').classList.add('hidden');
 }
 
+let lastPlaySaveAt = 0;
+const PLAY_SAVE_INTERVAL_MS = 5000; // あそんだ時間はこの間隔で保存する(毎秒書かない)
+
 function updatePlayTimer() {
   const now = Date.now();
   const next = BT.tick(playSession, now);
   if (next !== playSession) {
-    const enteringBreak = next.breakUntil != null;
+    // tick はあそんでいる間ずっと新しい session を返すので、
+    // 休憩の切り替わりと、ときどきの保存だけを行う
+    const enteringBreak = next.breakUntil != null && playSession.breakUntil == null;
     playSession = next;
-    savePlaySession(playSession);
+    if (enteringBreak || now - lastPlaySaveAt >= PLAY_SAVE_INTERVAL_MS) {
+      savePlaySession(playSession);
+      lastPlaySaveAt = now;
+    }
     if (enteringBreak) {
       closeModal();
       snd.beepAttention();

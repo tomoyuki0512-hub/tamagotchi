@@ -78,7 +78,7 @@ export function saveRecords(records) {
 
 // あそび時間セッション(5分あそんだら10分休憩)。アプリを閉じても続くよう永続化する
 const PLAY_SESSION_KEY = 'picotchi-playsession-v1';
-const DEFAULT_PLAY_SESSION = { playStartAt: null, breakUntil: null };
+const DEFAULT_PLAY_SESSION = { playedMs: 0, lastSeenAt: null, breakUntil: null };
 
 export function loadPlaySession() {
   try {
