@@ -393,6 +393,31 @@ body.theme-retro #screen-wrap::after {
 
 .hl-vs { font-size: 0.9rem; opacity: 0.6; font-weight: bold; }
 
+/* たしざん の しき */
+.math-question {
+  font-size: 2rem;
+  font-weight: bold;
+  text-align: center;
+  margin: 12px 0 14px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.math-blank {
+  display: inline-block;
+  min-width: 1.4em;
+  border-bottom: 3px solid color-mix(in srgb, var(--modal-fg) 45%, transparent);
+  color: var(--accent);
+}
+
+/* こたえあわせの 色づけ */
+.m-btn.big.correct {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
+  transform: scale(1.05);
+}
+
+.m-btn.big.wrong { opacity: 0.4; }
+
 /* ずかん */
 .zukan {
   display: flex;

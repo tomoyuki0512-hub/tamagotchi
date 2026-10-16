@@ -7,6 +7,7 @@ import * as snd from './sound.js';
 import * as MG from './minigame.js';
 import * as MEM from './memorygame.js';
 import * as HL from './highlow.js';
+import * as MA from './mathgame.js';
 import * as BT from './breaktimer.js';
 
 let state;
@@ -21,6 +22,7 @@ let selectedIcon = -1;     // A/B ボタン用の選択位置
 let match = null;          // ミニゲームの進行状態
 let memMatch = null;       // まねっこゲーム
 let hlMatch = null;        // たかいひくいゲーム
+let maMatch = null;        // たしざんゲーム
 let prevAttention = false;
 let deathShown = false;
 let msgTimer = null;
@@ -96,6 +98,7 @@ function closeModal() {
   match = null;
   memMatch = null;
   hlMatch = null;
+  maMatch = null;
   stopGameTimers();
 }
 
@@ -177,6 +180,7 @@ let matchHistory = [];
 let matchReactionTimes = []; // ヒット時の反応時間(ms)。ヒット以外は null
 let memHistory = [];         // まねっこの各ラウンド結果
 let hlHistory = [];          // たかいひくいの各ラウンド結果
+let maHistory = [];          // たしざんの各ラウンド結果
 let revealAt = 0;            // 合図(reveal)が出た時刻
 let gameRevealTimer = null;
 let gameWindowTimer = null;
@@ -194,6 +198,7 @@ const GAMES = [
   { id: 'reflex', emoji: '⚡', name: 'みぎひだり', hint: 'ひかったほうを すぐ おす' },
   { id: 'memory', emoji: '🧠', name: 'まねっこ',   hint: 'ひかった じゅんばんを おぼえる' },
   { id: 'highlow', emoji: '🔢', name: 'たかい ひくい', hint: 'つぎの すうじを よそうする' },
+  { id: 'math', emoji: '➕', name: 'たしざん', hint: 'こたえを えらぼう' },
 ];
 
 function doGame() {
@@ -214,7 +219,8 @@ function doGame() {
     const id = b.dataset.game;
     if (id === 'reflex') startReflexGame();
     else if (id === 'memory') startMemoryGame();
-    else startHighLowGame();
+    else if (id === 'highlow') startHighLowGame();
+    else startMathGame();
   }));
   c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
 }
@@ -505,6 +511,64 @@ function renderHighLowModal(status) {
     </div>`);
 
   c.querySelectorAll('[data-hl]').forEach((b) => b.addEventListener('click', () => handleHighLowGuess(b.dataset.hl)));
+  c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
+}
+
+// ---- たしざんゲーム(けいさん)----
+
+function startMathGame() {
+  maMatch = MA.newMatch();
+  maHistory = [];
+  runMathRound();
+}
+
+function runMathRound() {
+  MA.startRound(maMatch);
+  renderMathModal('こたえは どれ?');
+}
+
+function handleMathAnswer(value) {
+  if (!maMatch) return;
+  const r = MA.answerWith(maMatch, value);
+  if (r === 'ignored') return;
+
+  const success = r === 'hit';
+  maHistory[maMatch.round - 1] = success;
+  (success ? snd.beepConfirm : snd.beepCancel)();
+  renderMathModal(success ? 'せいかい! ○' : `ざんねん… こたえは ${maMatch.answer}`);
+  if (maMatch.finished) {
+    finishGame('たしざん', maMatch.won, `${maMatch.wins}もん せいかい した!<br>`);
+  } else {
+    gameAdvanceTimer = setTimeout(runMathRound, 1300);
+  }
+}
+
+function renderMathModal(status) {
+  const dots = Array.from({ length: MA.ROUNDS }, (_, i) => (
+    i >= maHistory.length ? '・' : (maHistory[i] ? '○' : '×')
+  )).join('');
+  const answered = maMatch.phase === 'result';
+
+  const buttons = maMatch.choices.map((c) => {
+    let extra = '';
+    if (answered) {
+      if (c === maMatch.answer) extra = ' correct';
+      else if (c === maMatch.lastPick) extra = ' wrong';
+    }
+    return `<button class="m-btn big${extra}" data-math="${c}">${c}</button>`;
+  }).join('');
+
+  const c = openModal(`
+    <h2>たしざん (${maMatch.round}/${MA.ROUNDS})</h2>
+    <div id="game-status">${status}</div>
+    <div class="math-question">${maMatch.a} + ${maMatch.b} = <span class="math-blank">?</span></div>
+    <div class="modal-buttons row">${buttons}</div>
+    <div id="game-rounds">${dots}</div>
+    <div class="modal-buttons">
+      <button class="m-btn secondary" data-close>やめる</button>
+    </div>`);
+
+  c.querySelectorAll('[data-math]').forEach((b) => b.addEventListener('click', () => handleMathAnswer(Number(b.dataset.math))));
   c.querySelector('[data-close]').addEventListener('click', () => { snd.beepCancel(); closeModal(); });
 }
 
