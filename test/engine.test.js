@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   newGame, catchUp, feedFood, FOODS, cleanPoop, giveMedicine,
   toggleLight, disciplinePet, applyGameResult, needsAttention,
-  nextGeneration, patPet, updateSleep, TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
+  nextGeneration, patPet, updateSleep, likesSweets, CHARACTERS,
+  TICK_MS, STAGE_BOUNDS, MAX_HEARTS, PAT_COOLDOWN_MS,
   NAP_MS, NAP_INTERVAL_MS,
 } from '../js/engine.js';
+import { SPRITES, PALETTES } from '../js/sprites.js';
 
 // 現地時間の指定時刻でタイムスタンプを作る(睡眠判定が現地時間ベースのため)
 function at(hour, minute = 0) {
@@ -302,6 +304,81 @@ test('世話が悪いとだららんに進化', () => {
   assert.equal(s.stage, 'adult');
   // しつけ0のまま育てたので、なまけ系になる
   assert.equal(s.character, 'adult_bad');
+});
+
+test('おやつ中心で育てると「あまいもの好き」の姿になる', () => {
+  const s = newGame(at(9));
+  s.discipline = 100;
+  s.careMistakes = 0;
+  const feed = () => {
+    while (feedFood(s, 'rice') === 'ok');
+    // ごはんより おやつ を多めにあげる
+    feedFood(s, 'berry');
+    feedFood(s, 'berry');
+    feedFood(s, 'berry');
+    cleanPoop(s);
+    s.weight = 20;
+    if (s.sick) giveMedicine(s);
+    s.careMistakes = 0;
+    if (s.callActive) disciplinePet(s);
+    s.discipline = 100;
+  };
+  for (let i = 0; i < STAGE_BOUNDS.teen + 10; i += 30) { advance(s, 30); feed(); }
+  assert.equal(s.stage, 'adult');
+  assert.ok(likesSweets(s), 'おやつのほうが多い');
+  assert.equal(s.character, 'adult_good_sweet');
+});
+
+test('likesSweets は おやつ が ごはん より多いときだけ true', () => {
+  const s = newGame(at(9));
+  advance(s, 10);
+  assert.equal(likesSweets(s), false, '何もあげていなければ false');
+  feedFood(s, 'cake');
+  assert.equal(likesSweets(s), true);
+  s.hunger = 0;
+  feedFood(s, 'rice');
+  assert.equal(likesSweets(s), false, '同数なら false');
+});
+
+test('ティーンは お世話が あらっぽいと とげまる になる', () => {
+  const s = newGame(at(9));
+  const feed = () => {
+    while (feedFood(s, 'rice') === 'ok');
+    s.happy = MAX_HEARTS;
+    cleanPoop(s);
+    s.weight = 20;
+    if (s.sick) giveMedicine(s);
+    s.careMistakes = 10; // ずっとお世話ミスが多い状態
+  };
+  for (let i = 0; i < STAGE_BOUNDS.child + 10; i += 30) { advance(s, 30); feed(); }
+  assert.equal(s.stage, 'teen');
+  assert.equal(s.character, 'teen_wild');
+});
+
+test('ていねいに育てたティーンは ぴよたん のまま', () => {
+  const s = newGame(at(9));
+  const feed = () => {
+    while (feedFood(s, 'rice') === 'ok');
+    s.happy = MAX_HEARTS;
+    cleanPoop(s);
+    s.weight = 20;
+    if (s.sick) giveMedicine(s);
+    s.careMistakes = 0;
+  };
+  for (let i = 0; i < STAGE_BOUNDS.child + 10; i += 30) { advance(s, 30); feed(); }
+  assert.equal(s.stage, 'teen');
+  assert.equal(s.character, 'teen');
+});
+
+test('すべてのキャラにドット絵とパレットがある', () => {
+  for (const id of Object.keys(CHARACTERS)) {
+    assert.ok(SPRITES[id], `${id} のドット絵がない`);
+    assert.ok(PALETTES[id], `${id} のパレットがない`);
+    for (const frame of SPRITES[id].frames) {
+      assert.equal(frame.length, 16, `${id} の行数`);
+      for (const row of frame) assert.equal(row.length, 16, `${id} の桁数`);
+    }
+  }
 });
 
 test('しつけ: 呼び出しに応えると discipline が上がる', () => {

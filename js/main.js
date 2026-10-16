@@ -592,6 +592,34 @@ function afterAction() {
 
 // ---- 設定 ----
 
+// ずかん: 出会ったキャラは名前を、まだのキャラは ??? を出す(たまごは除く)
+function zukanIds() {
+  return Object.keys(E.CHARACTERS).filter((id) => id !== 'egg');
+}
+
+function seenCount() {
+  const seen = records.seenCharacters || [];
+  return zukanIds().filter((id) => seen.includes(id)).length;
+}
+
+function zukanHtml() {
+  const seen = records.seenCharacters || [];
+  return zukanIds().map((id) => {
+    const found = seen.includes(id);
+    return `<span class="zukan-item${found ? ' found' : ''}">${found ? E.CHARACTERS[id].name : '???'}</span>`;
+  }).join('');
+}
+
+// いま育てているキャラを ずかん に登録する
+function recordSeenCharacter() {
+  const id = state.character;
+  if (!id || id === 'egg') return;
+  if (!records.seenCharacters) records.seenCharacters = [];
+  if (records.seenCharacters.includes(id)) return;
+  records.seenCharacters.push(id);
+  saveRecords(records);
+}
+
 function openSettings() {
   snd.beep();
   const c = openModal(`
@@ -616,6 +644,8 @@ function openSettings() {
     <div class="meter-row"><span>ゲームの せいせき</span><b>${records.gamesWon} / ${records.gamesPlayed} かち</b></div>
     <div class="meter-row"><span>さいちょう じゅみょう</span><b>${records.longestLifeDays} にち</b></div>
     <div class="meter-row"><span>はんしゃベスト</span><b>${records.bestAvgReactionMs != null ? records.bestAvgReactionMs + 'ms' : 'まだ なし'}</b></div>
+    <div class="section-label">ずかん (${seenCount()} / ${Object.keys(E.CHARACTERS).length - 1})</div>
+    <div class="zukan">${zukanHtml()}</div>
     <div class="modal-buttons">
       <button class="m-btn secondary" data-reset>さいしょから そだてなおす</button>
       <button class="m-btn" data-close>とじる</button>
@@ -748,6 +778,7 @@ function handleLiveEvents(events) {
 
 function updateHUD() {
   $('#gen-label').textContent = `だい${state.generation}せだい`;
+  recordSeenCharacter();
 
   const attention = E.needsAttention(state);
   const icon = $('#attention-icon');

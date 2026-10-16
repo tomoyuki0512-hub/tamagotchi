@@ -393,6 +393,29 @@ body.theme-retro #screen-wrap::after {
 
 .hl-vs { font-size: 0.9rem; opacity: 0.6; font-weight: bold; }
 
+/* ずかん */
+.zukan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 12px;
+}
+
+.zukan-item {
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--modal-fg) 10%, transparent);
+  color: color-mix(in srgb, var(--modal-fg) 45%, transparent);
+  letter-spacing: 0.04em;
+}
+
+.zukan-item.found {
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
 /* メーター画面 */
 .meter-row {
   display: flex;

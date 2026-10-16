@@ -58,10 +58,16 @@ export const CHARACTERS = {
   egg: { id: 'egg', name: 'たまご' },
   baby: { id: 'baby', name: 'ぷちまる' },
   child: { id: 'child', name: 'まめっこ' },
+  // ティーンは おせわの よさ で2種類に分かれる
   teen: { id: 'teen', name: 'ぴよたん' },
+  teen_wild: { id: 'teen_wild', name: 'とげまる' },
+  // アダルトは「おせわの よさ」×「たべものの すきずき」で6種類
   adult_good: { id: 'adult_good', name: 'きらりん' },
   adult_normal: { id: 'adult_normal', name: 'もちすけ' },
   adult_bad: { id: 'adult_bad', name: 'だららん' },
+  adult_good_sweet: { id: 'adult_good_sweet', name: 'ぱふぇる' },
+  adult_normal_sweet: { id: 'adult_normal_sweet', name: 'まんまる' },
+  adult_bad_sweet: { id: 'adult_bad_sweet', name: 'ごろりん' },
 };
 
 export function newGame(now, generation = 1) {
@@ -94,6 +100,8 @@ export function newGame(now, generation = 1) {
     sickTicks: 0,
     napUntil: null,
     napCooldownUntil: null,
+    mealsFed: 0,
+    snacksFed: 0,
     hungerMistakeGiven: false,
     happyMistakeGiven: false,
     sickMistakeGiven: false,
@@ -126,10 +134,26 @@ function lifespanDays(state) {
   return 15 + Math.max(0, 6 - state.careMistakes);
 }
 
+// おせわの よさ(お世話ミスの少なさ と しつけ)
+function careTier(state) {
+  if (state.careMistakes <= 2 && state.discipline >= 75) return 'good';
+  if (state.careMistakes >= 6 || state.discipline < 25) return 'bad';
+  return 'normal';
+}
+
+// ごはんより おやつ を多くあげて育てると「あまいもの好き」の姿になる
+export function likesSweets(state) {
+  return (state.snacksFed || 0) > (state.mealsFed || 0);
+}
+
+// ティーンは お世話が あらっぽいと とげまる になる
+function teenCharacter(state) {
+  return state.careMistakes >= 4 ? 'teen_wild' : 'teen';
+}
+
 function adultCharacter(state) {
-  if (state.careMistakes <= 2 && state.discipline >= 75) return 'adult_good';
-  if (state.careMistakes >= 6 || state.discipline < 25) return 'adult_bad';
-  return 'adult_normal';
+  const base = `adult_${careTier(state)}`;
+  return likesSweets(state) ? `${base}_sweet` : base;
 }
 
 function pushEvent(state, type, ts) {
@@ -161,6 +185,9 @@ function tickOnce(state, ts) {
       pushEvent(state, 'hatched', ts);
     } else if (newStage === 'adult') {
       state.character = adultCharacter(state);
+      pushEvent(state, 'evolved:' + state.character, ts);
+    } else if (newStage === 'teen') {
+      state.character = teenCharacter(state);
       pushEvent(state, 'evolved:' + state.character, ts);
     } else {
       state.character = newStage;
@@ -357,6 +384,9 @@ export function feedFood(state, foodId) {
   state.hunger = Math.min(MAX_HEARTS, state.hunger + food.hunger);
   state.happy = Math.min(MAX_HEARTS, state.happy + food.happy);
   state.weight = Math.max(MIN_WEIGHT, state.weight + food.weight);
+  // 進化先(あまいもの好きかどうか)の判定に使う
+  if (food.kind === 'meal') state.mealsFed = (state.mealsFed || 0) + 1;
+  else state.snacksFed = (state.snacksFed || 0) + 1;
   return 'ok';
 }
 

@@ -56,6 +56,7 @@ const DEFAULT_RECORDS = {
   gamesWon: 0,
   longestLifeDays: 0,
   bestAvgReactionMs: null,
+  seenCharacters: [], // ずかん: これまでに育てたことのあるキャラの id
 };
 
 export function loadRecords() {
